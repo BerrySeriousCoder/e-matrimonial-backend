@@ -17,6 +17,16 @@ const PORT = process.env.PORT || 4000;
 app.use(cors());
 app.use(express.json());
 
+// Root route to check if backend is running
+app.get('/', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    message: 'Backend is running',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0'
+  });
+});
+
 app.use('/api/posts', postsRouter);
 app.use('/api/otp', otpRouter);
 app.use('/api/email', emailRouter);
