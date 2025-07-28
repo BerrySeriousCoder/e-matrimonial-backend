@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1753409491095,
+      "tag": "0000_adorable_ravenous",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1753425130413,
+      "tag": "0001_shocking_infant_terrible",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1753434405506,
+      "tag": "0002_same_azazel",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1753578612502,
+      "tag": "0003_keen_quentin_quire",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1753586676589,
+      "tag": "0004_whole_wallflower",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1753588620364,
+      "tag": "0005_melted_betty_ross",
+      "breakpoints": true
+    }
+  ]
+}
