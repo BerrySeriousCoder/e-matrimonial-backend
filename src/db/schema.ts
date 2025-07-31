@@ -1,15 +1,15 @@
-import { pgTable, serial, varchar, timestamp, integer, pgEnum, jsonb, text } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, timestamp, integer, pgEnum, jsonb, text, boolean } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // Enums
 export const lookingForEnum = pgEnum('looking_for', ['bride', 'groom']);
 export const fontSizeEnum = pgEnum('font_size', ['default', 'medium', 'large']);
-export const statusEnum = pgEnum('status', ['pending', 'published', 'archived', 'deleted']);
+export const statusEnum = pgEnum('status', ['pending', 'published', 'archived', 'deleted', 'expired']);
 
 export const posts = pgTable('posts', {
   id: serial('id').primaryKey(),
   email: varchar('email', { length: 255 }).notNull(),
-  content: varchar('content', { length: 2000 }).notNull(),
+  content: varchar('content', { length: 1000 }).notNull(),
   userId: integer('user_id').references(() => users.id),
   lookingFor: lookingForEnum('looking_for'),
   expiresAt: timestamp('expires_at'),
@@ -41,6 +41,22 @@ export const userSelectedProfiles = pgTable('user_selected_profiles', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+// Email tracking tables
+export const postEmails = pgTable('post_emails', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id), // nullable for anonymous users
+  email: varchar('email', { length: 255 }), // for anonymous email tracking
+  postId: integer('post_id').notNull().references(() => posts.id),
+  sentAt: timestamp('sent_at').defaultNow().notNull(),
+});
+
+export const userEmailLimits = pgTable('user_email_limits', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().unique().references(() => users.id),
+  dailyCount: integer('daily_count').default(0).notNull(),
+  lastResetDate: varchar('last_reset_date', { length: 10 }).notNull(), // YYYY-MM-DD format
+});
+
 // Admin tables
 export const admins = pgTable('admins', {
   id: serial('id').primaryKey(),
@@ -64,16 +80,19 @@ export const adminLogs = pgTable('admin_logs', {
 });
 
 // Relations
-export const postsRelations = relations(posts, ({ one }) => ({
+export const postsRelations = relations(posts, ({ one, many }) => ({
   user: one(users, {
     fields: [posts.userId],
     references: [users.id],
   }),
+  emails: many(postEmails),
 }));
 
 export const usersRelations = relations(users, ({ many }) => ({
   posts: many(posts),
   selectedProfiles: many(userSelectedProfiles),
+  sentEmails: many(postEmails),
+  emailLimits: many(userEmailLimits),
 }));
 
 export const userSelectedProfilesRelations = relations(userSelectedProfiles, ({ one }) => ({
@@ -87,6 +106,24 @@ export const userSelectedProfilesRelations = relations(userSelectedProfiles, ({ 
   }),
 }));
 
+export const postEmailsRelations = relations(postEmails, ({ one }) => ({
+  user: one(users, {
+    fields: [postEmails.userId],
+    references: [users.id],
+  }),
+  post: one(posts, {
+    fields: [postEmails.postId],
+    references: [posts.id],
+  }),
+}));
+
+export const userEmailLimitsRelations = relations(userEmailLimits, ({ one }) => ({
+  user: one(users, {
+    fields: [userEmailLimits.userId],
+    references: [users.id],
+  }),
+}));
+
 export const adminsRelations = relations(admins, ({ many }) => ({
   logs: many(adminLogs),
 }));
@@ -96,7 +133,7 @@ export const adminLogsRelations = relations(adminLogs, ({ one }) => ({
     fields: [adminLogs.adminId],
     references: [admins.id],
   }),
-})); 
+}));
 
 // UI Texts table for customizable labels
 export const uiTexts = pgTable('ui_texts', {
@@ -105,4 +142,41 @@ export const uiTexts = pgTable('ui_texts', {
   value: varchar('value', { length: 500 }).notNull(),
   description: varchar('description', { length: 255 }),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-}); 
+});
+
+// Search Filter System Tables
+export const searchFilterSections = pgTable('search_filter_sections', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 100 }).notNull().unique(),
+  displayName: varchar('display_name', { length: 100 }).notNull(),
+  description: varchar('description', { length: 255 }),
+  order: integer('order').notNull().default(0),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const searchFilterOptions = pgTable('search_filter_options', {
+  id: serial('id').primaryKey(),
+  sectionId: integer('section_id').notNull().references(() => searchFilterSections.id, { onDelete: 'cascade' }),
+  value: varchar('value', { length: 100 }).notNull(),
+  displayName: varchar('display_name', { length: 100 }).notNull(),
+  order: integer('order').notNull().default(0),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+
+
+// Relations
+export const searchFilterSectionsRelations = relations(searchFilterSections, ({ many }) => ({
+  options: many(searchFilterOptions),
+}));
+
+export const searchFilterOptionsRelations = relations(searchFilterOptions, ({ one }) => ({
+  section: one(searchFilterSections, {
+    fields: [searchFilterOptions.sectionId],
+    references: [searchFilterSections.id],
+  }),
+})); 
