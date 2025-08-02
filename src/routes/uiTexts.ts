@@ -3,6 +3,7 @@ import { db } from '../db';
 import { uiTexts } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { requireSuperadminAuth, AdminRequest } from '../middleware/adminAuth';
+import { validate, sanitizeInput, schemas } from '../middleware/validation';
 
 const router = Router();
 
@@ -41,14 +42,10 @@ router.get('/admin', requireSuperadminAuth, async (req: AdminRequest, res) => {
 });
 
 // PUT /api/ui-texts/admin/:key - Update a specific text (Superadmin Only)
-router.put('/admin/:key', requireSuperadminAuth, async (req: AdminRequest, res) => {
+router.put('/admin/:key', requireSuperadminAuth, sanitizeInput, validate(schemas.updateUIText), async (req: AdminRequest, res) => {
   try {
     const { key } = req.params;
     const { value } = req.body;
-
-    if (!value || typeof value !== 'string') {
-      return res.status(400).json({ success: false, error: 'Value is required and must be a string' });
-    }
 
     await db
       .update(uiTexts)
