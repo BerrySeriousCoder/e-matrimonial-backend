@@ -3,22 +3,21 @@ import { db } from '../db';
 import { otps } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { sendEmail } from '../utils/sendEmail';
+import { validate, sanitizeInput, schemas } from '../middleware/validation';
 
 const router = Router();
 
-// Helper to generate OTP
-function generateOtp() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
 // POST /api/otp/request
-router.post('/request', async (req, res) => {
+router.post('/request', sanitizeInput, validate(schemas.requestOtp), async (req, res) => {
   const { email } = req.body;
-  if (!email) return res.status(400).json({ success: false, message: 'Email required' });
-  const otp = generateOtp();
+  
+  // Generate OTP
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min from now
+  
   // Save OTP in DB
   await db.insert(otps).values({ email, otp, expiresAt });
+  
   // Send OTP via email
   try {
     await sendEmail({
@@ -33,17 +32,21 @@ router.post('/request', async (req, res) => {
 });
 
 // POST /api/otp/verify
-router.post('/verify', async (req, res) => {
+router.post('/verify', sanitizeInput, validate(schemas.verifyOtp), async (req, res) => {
   const { email, otp } = req.body;
-  if (!email || !otp) return res.status(400).json({ success: false, message: 'Missing fields' });
+  
+  // Verify OTP
   const now = new Date();
-  const found = await db.select().from(otps).where(eq(otps.email, email)).orderBy(otps.createdAt);
+  const found = await db.select().from(otps).where(eq(otps.email, email));
   const valid = found.find(r => r.otp === otp && r.expiresAt > now);
+  
   if (!valid) {
     return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
   }
-  // Delete all OTPs for this email after successful verification
+  
+  // Delete used OTP
   await db.delete(otps).where(eq(otps.email, email));
+  
   res.json({ success: true, message: 'OTP verified' });
 });
 

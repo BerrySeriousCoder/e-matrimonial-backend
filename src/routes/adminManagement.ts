@@ -5,11 +5,12 @@ import { db } from '../db';
 import { admins } from '../db/schema';
 import { requireSuperadminAuth, AdminRequest } from '../middleware/adminAuth';
 import { logAdminAction } from '../utils/adminLogger';
+import { validate, sanitizeInput, validateQuery, schemas } from '../middleware/validation';
 
 const router = express.Router();
 
 // GET /api/admin/management - List all admins with search and pagination
-router.get('/', requireSuperadminAuth, async (req: AdminRequest, res) => {
+router.get('/', requireSuperadminAuth, validateQuery(schemas.adminManagementQuery), async (req: AdminRequest, res) => {
   try {
     const { search, page = 1 } = req.query;
     const limit = 20;
@@ -54,34 +55,9 @@ router.get('/', requireSuperadminAuth, async (req: AdminRequest, res) => {
 });
 
 // POST /api/admin/management - Create new admin
-router.post('/', requireSuperadminAuth, async (req: AdminRequest, res) => {
+router.post('/', requireSuperadminAuth, sanitizeInput, validate(schemas.createAdmin), async (req: AdminRequest, res) => {
   try {
     const { email, password } = req.body;
-
-    // Validate required fields
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        error: 'Email and password are required'
-      });
-    }
-
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid email format'
-      });
-    }
-
-    // Validate password strength (minimum 6 characters)
-    if (password.length < 6) {
-      return res.status(400).json({
-        success: false,
-        error: 'Password must be at least 6 characters long'
-      });
-    }
 
     // Check if admin already exists
     const existingAdmin = await db.select().from(admins).where(eq(admins.email, email));

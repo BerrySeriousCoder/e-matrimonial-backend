@@ -10,6 +10,7 @@
     "seed": "ts-node src/db/seed.ts",
     "seed:admin": "ts-node src/db/adminSeed.ts",
     "seed:ui-texts": "ts-node src/db/uiTextsSeed.ts",
+    "seed:filters": "ts-node src/db/filterTestSeed.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push"
@@ -19,13 +20,19 @@
   "license": "ISC",
   "dependencies": {
     "@sendgrid/mail": "^8.1.5",
+    "@types/express-rate-limit": "^6.0.2",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "drizzle-orm": "^0.44.3",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.0.1",
+    "express-validator": "^7.2.1",
+    "helmet": "^8.1.0",
+    "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "postgres": "^3.4.7"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

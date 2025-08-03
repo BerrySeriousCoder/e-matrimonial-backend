@@ -6,16 +6,17 @@ import { db } from '../db';
 import { admins, posts, users, adminLogs } from '../db/schema';
 import { requireAdminAuth, requireSuperadminAuth, AdminRequest, isSuperadmin } from '../middleware/adminAuth';
 import { logAdminAction } from '../utils/adminLogger';
+import { validate, sanitizeInput, validateQuery, schemas } from '../middleware/validation';
+import { createRateLimiters } from '../middleware/security';
 
 const router = express.Router();
 
-// Admin Login
-router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+// Get admin-specific rate limiters
+const { adminAuthLimiter } = createRateLimiters();
 
-  if (!email || !password) {
-    return res.status(400).json({ success: false, message: 'Email and password required' });
-  }
+// Admin Login - with specific auth rate limiter
+router.post('/login', adminAuthLimiter, sanitizeInput, validate(schemas.adminLogin), async (req, res) => {
+  const { email, password } = req.body;
 
   try {
     const [admin] = await db.select().from(admins).where(eq(admins.email, email));
@@ -86,7 +87,7 @@ router.get('/profile', requireAdminAuth, async (req: AdminRequest, res) => {
 });
 
 // Get All Posts (Admin)
-router.get('/posts', requireAdminAuth, async (req: AdminRequest, res) => {
+router.get('/posts', requireAdminAuth, validateQuery(schemas.adminPostsQuery), async (req: AdminRequest, res) => {
   const { status, search, page = 1 } = req.query;
   const limit = 20;
   const offset = (Number(page) - 1) * limit;
@@ -133,7 +134,7 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
   const { id } = req.params;
   const { status } = req.body;
 
-  if (!status || !['pending', 'published', 'archived', 'deleted'].includes(status)) {
+  if (!status || !['pending', 'published', 'archived', 'deleted', 'expired'].includes(status)) {
     return res.status(400).json({ success: false, message: 'Valid status required' });
   }
 
@@ -145,9 +146,18 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
       return res.status(404).json({ success: false, message: 'Post not found' });
     }
 
-    // Update post status
+    // Update post status and set expiresAt if publishing
+    let updateData: any = { status };
+    
+    if (status === 'published') {
+      // Set expiresAt to current date + 28 days (default duration)
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 28);
+      updateData.expiresAt = expiresAt;
+    }
+    
     const [updatedPost] = await db.update(posts)
-      .set({ status })
+      .set(updateData)
       .where(eq(posts.id, Number(id)))
       .returning();
 
@@ -200,22 +210,10 @@ router.post('/posts', requireAdminAuth, async (req: AdminRequest, res) => {
   }
 
   try {
-    // Check if user already has a post
-    const existingUser = await db.select().from(users).where(eq(users.email, email));
-
-    if (existingUser.length > 0) {
-      const existingPost = await db.select().from(posts).where(eq(posts.userId, existingUser[0].id));
-
-      if (existingPost.length > 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'User can post only one ad'
-        });
-      }
-    }
-
     // Create or get user
     let userId;
+    const existingUser = await db.select().from(users).where(eq(users.email, email));
+
     if (existingUser.length > 0) {
       userId = existingUser[0].id;
     } else {

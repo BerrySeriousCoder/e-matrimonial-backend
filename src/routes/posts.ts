@@ -1,19 +1,22 @@
 import { Router } from 'express';
 import { db } from '../db';
-import { posts, users, otps } from '../db/schema';
-import { eq, and, gt, isNull } from 'drizzle-orm';
+import { posts, users, otps, searchFilterOptions } from '../db/schema';
+import { eq, and, gt, isNull, inArray, desc } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
+import { validate, sanitizeInput, validateQuery, schemas } from '../middleware/validation';
+import { userAuth } from '../middleware/userAuth';
 
 const router = Router();
 
 // GET /api/posts - paginated (only published and non-expired posts)
-router.get('/', async (req, res) => {
+router.get('/', validateQuery(schemas.postsQuery), async (req, res) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 20;
   const offset = (page - 1) * limit;
   const lookingFor = req.query.lookingFor as string; // 'bride' or 'groom'
   const search = req.query.search as string; // search term
+  const filters = req.query.filters as string; // JSON string of selected filter options
 
   // Build where conditions
   const whereConditions = [
@@ -26,17 +29,85 @@ router.get('/', async (req, res) => {
     whereConditions.push(eq(posts.lookingFor, lookingFor));
   }
 
-  // Add search filter if provided
+  // Enhanced search filter with case-insensitive matching
   if (search) {
-    whereConditions.push(
-      sql`(${posts.email} ILIKE ${`%${search}%`} OR ${posts.content} ILIKE ${`%${search}%`} OR ${posts.content} % ${search})`
+    const searchTerms = search.trim().toLowerCase().split(/\s+/);
+    
+    // Create search conditions for each term
+    const searchConditions = searchTerms.map(term => 
+      sql`(
+        LOWER(${posts.email}) LIKE ${`%${term}%`} OR 
+        LOWER(${posts.content}) LIKE ${`%${term}%`} OR
+        ${posts.content} % ${term}
+      )`
     );
+    
+    // All search terms must match (AND logic)
+    if (searchConditions.length > 0) {
+      // @ts-ignore - TypeScript issue with SQL conditions
+      whereConditions.push(and(...searchConditions));
+    }
+  }
+
+  // Add search filter options if provided
+  if (filters) {
+    try {
+      const selectedOptions = JSON.parse(filters);
+      if (Array.isArray(selectedOptions) && selectedOptions.length > 0) {
+        
+        // Get the filter options and their values
+        const filterOptions = await db
+          .select({
+            optionId: searchFilterOptions.id,
+            sectionId: searchFilterOptions.sectionId,
+            value: searchFilterOptions.value,
+          })
+          .from(searchFilterOptions)
+          .where(inArray(searchFilterOptions.id, selectedOptions));
+
+        // Group options by section
+        const sectionGroups = filterOptions.reduce((acc, option) => {
+          if (!acc[option.sectionId]) acc[option.sectionId] = [];
+          acc[option.sectionId].push(option);
+          return acc;
+        }, {} as Record<number, typeof filterOptions>);
+
+        // For each section, find posts that match ANY option in that section
+        const sectionConditions = Object.values(sectionGroups).map(sectionOptions => {
+          const optionValues = sectionOptions.map(opt => opt.value);
+          
+          // Create search conditions for each option value
+          const optionConditions = optionValues.map(value => {
+            const searchValue = value.toLowerCase();
+            return sql`(
+              LOWER(${posts.content}) LIKE ${`%${searchValue}%`} OR
+              LOWER(${posts.email}) LIKE ${`%${searchValue}%`}
+            )`;
+          });
+          
+          // Any option in this section can match (OR logic within section)
+          if (optionConditions.length === 1) {
+            return optionConditions[0];
+          } else {
+            return sql`(${optionConditions.reduce((acc, condition) => sql`${acc} OR ${condition}`)})`;
+          }
+        });
+
+        // All sections must match (AND logic across sections)
+        if (sectionConditions.length > 0) {
+          // @ts-ignore - TypeScript issue with SQL conditions
+          whereConditions.push(and(...sectionConditions));
+        }
+      }
+    } catch (error) {
+      console.error('Error parsing filters:', error);
+    }
   }
 
   const [postsData, totalCount] = await Promise.all([
     db.select().from(posts)
       .where(and(...whereConditions))
-      .orderBy(posts.createdAt)
+      .orderBy(desc(posts.createdAt))
       .limit(limit)
       .offset(offset),
     db.select({ count: sql<number>`count(*)` })
@@ -72,7 +143,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/posts - create post with new logic
-router.post('/', async (req, res) => {
+router.post('/', sanitizeInput, validate(schemas.createPost), async (req, res) => {
   const { 
     email, 
     content, 
@@ -83,123 +154,42 @@ router.post('/', async (req, res) => {
     bgColor 
   } = req.body;
 
-  // Validate required fields
-  if (!email || !content || !otp || !lookingFor || !duration) {
-    return res.status(400).json({ 
-      success: false, 
-      message: 'Missing required fields' 
-    });
-  }
+  // Verify OTP
+  const now = new Date();
+  const found = await db.select().from(otps).where(eq(otps.email, email));
+  const valid = found.find(r => r.otp === otp && r.expiresAt > now);
+  if (!valid) return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+  await db.delete(otps).where(eq(otps.email, email));
 
-  // Validate lookingFor
-  if (!['bride', 'groom'].includes(lookingFor)) {
-    return res.status(400).json({ 
-      success: false, 
-      message: 'Invalid lookingFor value' 
-    });
-  }
+  // Create post (expiresAt will be set when admin approves)
+  const result = await db.insert(posts).values({
+    email,
+    content,
+    lookingFor,
+    fontSize,
+    bgColor,
+    status: 'pending'
+  }).returning();
 
-  // Validate duration
-  if (![15, 20, 25].includes(duration)) {
-    return res.status(400).json({ 
-      success: false, 
-      message: 'Invalid duration value' 
-    });
-  }
+  res.json({ success: true, message: 'Post created and pending approval', postId: result[0].id });
+});
 
-  // Validate fontSize
-  if (fontSize && !['default', 'medium', 'large'].includes(fontSize)) {
-    return res.status(400).json({ 
-      success: false, 
-      message: 'Invalid fontSize value' 
-    });
-  }
+// POST /api/posts/authenticated - create post for authenticated users (no OTP required)
+router.post('/authenticated', userAuth, sanitizeInput, validate(schemas.createAuthenticatedPost), async (req: any, res) => {
+  const { content, lookingFor, duration, fontSize, bgColor } = req.body;
+  const userEmail = req.user.email; // From JWT token
 
-  try {
-    // Verify OTP
-    const otpRecord = await db.select().from(otps)
-      .where(and(
-        eq(otps.email, email),
-        eq(otps.otp, otp),
-        gt(otps.expiresAt, new Date())
-      ));
+  // Create post (expiresAt will be set when admin approves)
+  const result = await db.insert(posts).values({
+    email: userEmail,
+    content,
+    lookingFor,
+    fontSize,
+    bgColor,
+    status: 'pending'
+  }).returning();
 
-    if (!otpRecord.length) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid or expired OTP' 
-      });
-    }
-
-    // Check if user already has a post
-    const existingUser = await db.select().from(users)
-      .where(eq(users.email, email));
-    
-    if (existingUser.length > 0) {
-      const existingPost = await db.select().from(posts)
-        .where(eq(posts.userId, existingUser[0].id));
-      
-      if (existingPost.length > 0) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'You can post only one ad' 
-        });
-      }
-    }
-
-    // Create or get user
-    let userId;
-    if (existingUser.length > 0) {
-      userId = existingUser[0].id;
-    } else {
-      // Create new user with random password (they can reset it later)
-      const randomPassword = Math.random().toString(36).slice(-8);
-      const hashedPassword = await bcrypt.hash(randomPassword, 10);
-      
-      const [newUser] = await db.insert(users)
-        .values({ 
-          email, 
-          password: hashedPassword 
-        })
-        .returning();
-      
-      userId = newUser.id;
-    }
-
-    // Calculate expiresAt
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + duration);
-
-    // Create post
-    const [newPost] = await db.insert(posts)
-      .values({ 
-        email, 
-        content, 
-        userId,
-        lookingFor,
-        expiresAt,
-        fontSize: fontSize || 'default',
-        bgColor: bgColor || null,
-        status: 'pending'
-      })
-      .returning();
-
-    // Delete used OTP
-    await db.delete(otps).where(eq(otps.email, email));
-
-    res.status(201).json({ 
-      success: true, 
-      message: 'Post created successfully and pending approval', 
-      post: newPost 
-    });
-
-  } catch (error) {
-    console.error('Error creating post:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Internal server error' 
-    });
-  }
+  res.json({ success: true, message: 'Post created and pending approval', postId: result[0].id });
 });
 
 export default router; 
