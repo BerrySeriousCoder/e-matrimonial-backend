@@ -241,12 +241,13 @@ router.post('/verify', sanitizeInput, validate(paymentSchemas.verifyPayment), as
 // POST /api/payment/verify-callback - verify Razorpay redirect params for UX (non-authoritative)
 router.post('/verify-callback', sanitizeInput, validate(paymentSchemas.verifyCallback), async (req, res) => {
   try {
-    const { payment_link_id, razorpay_payment_id, payment_link_reference_id, payment_link_status } = req.body;
+    const { payment_link_id, razorpay_payment_id, payment_link_reference_id, payment_link_status, razorpay_signature } = req.body;
     const ok = RazorpayService.verifyPaymentSignature(
       payment_link_id,
       razorpay_payment_id,
       payment_link_reference_id,
-      payment_link_status
+      payment_link_status,
+      razorpay_signature || ''
     );
     return res.json({ success: ok });
   } catch (error) {
