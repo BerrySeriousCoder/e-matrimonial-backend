@@ -50,7 +50,7 @@ export class RazorpayService {
           email: true,
         },
         reminder_enable: true,
-        callback_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/callback`,
+        callback_url: `${process.env.CLIENT_BASE_URL || process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/callback`,
         callback_method: 'get',
         reference_id: `post_${postId}`,
         expire_by: expireBy,
