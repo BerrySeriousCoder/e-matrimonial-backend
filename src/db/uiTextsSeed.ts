@@ -118,19 +118,24 @@ const defaultTexts = [
     description: 'Placeholder text for password field'
   },
   {
-    key: 'confirmPassword',
-    value: 'Confirm Password',
-    description: 'Label for confirm password field'
+    key: 'newPassword',
+    value: 'New Password',
+    description: 'Label for new password field (reset)'
   },
   {
-    key: 'confirmPasswordPlaceholder',
-    value: 'Confirm your password',
-    description: 'Placeholder text for confirm password field'
+    key: 'newPasswordPlaceholder',
+    value: 'Enter your new password',
+    description: 'Placeholder text for new password field (reset)'
   },
   {
-    key: 'filterAll',
-    value: 'All',
-    description: 'Filter option for showing all posts'
+    key: 'confirmNewPassword',
+    value: 'Confirm New Password',
+    description: 'Label for confirm new password field (reset)'
+  },
+  {
+    key: 'confirmNewPasswordPlaceholder',
+    value: 'Re-enter your new password',
+    description: 'Placeholder text for confirm new password field (reset)'
   },
   {
     key: 'filterSelected',
@@ -139,12 +144,12 @@ const defaultTexts = [
   },
   {
     key: 'filterBride',
-    value: 'Looking for Bride',
+    value: 'I am looking for bride',
     description: 'Filter option for bride posts'
   },
   {
     key: 'filterGroom',
-    value: 'Looking for Groom',
+    value: 'I am looking for groom',
     description: 'Filter option for groom posts'
   }
 ];
@@ -159,7 +164,7 @@ async function seedUiTexts() {
         .values(text)
         .onConflictDoUpdate({
           target: uiTexts.key,
-          set: { value: text.value, description: text.description, updatedAt: new Date() }
+          set: { value: text.value, description: text.description, updatedAt: new Date().toISOString() }
         });
     }
     

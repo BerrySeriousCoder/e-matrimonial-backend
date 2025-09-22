@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { sendEmail } from '../utils/sendEmail';
 import { validate, sanitizeInput, schemas } from '../middleware/validation';
+import { trackProfileSelection } from '../middleware/analytics';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -21,7 +22,7 @@ router.post('/register', sanitizeInput, validate(schemas.register), async (req: 
   const { email, password, otp } = req.body;
   
   // Verify OTP (reuse logic from /api/otp/verify)
-  const now = new Date();
+  const now = new Date().toISOString();
   const found = await db.select().from(otps).where(eq(otps.email, email));
   const valid = found.find(r => r.otp === otp && r.expiresAt > now);
   if (!valid) return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
@@ -59,7 +60,7 @@ router.post('/reset-password', sanitizeInput, validate(schemas.resetPassword), a
   const { email, otp, newPassword } = req.body;
   
   // Verify OTP (reuse logic from /api/otp/verify)
-  const now = new Date();
+  const now = new Date().toISOString();
   const found = await db.select().from(otps).where(eq(otps.email, email));
   const valid = found.find(r => r.otp === otp && r.expiresAt > now);
   if (!valid) return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
@@ -83,7 +84,7 @@ router.post('/login-with-otp', sanitizeInput, validate(schemas.requestOtp), asyn
   
   // Generate and send OTP
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min from now
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min from now
   
   // Save OTP in DB
   await db.insert(otps).values({ email, otp, expiresAt });
@@ -109,8 +110,38 @@ router.post('/verify-login-otp', sanitizeInput, validate(schemas.verifyOtp), asy
   // Verify OTP
   const now = new Date();
   const found = await db.select().from(otps).where(eq(otps.email, email));
-  const valid = found.find(r => r.otp === otp && r.expiresAt > now);
-  if (!valid) return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+  
+  // Find the most recent valid OTP
+  const valid = found
+    .filter(r => {
+      const otpMatch = r.otp === otp;
+      // Convert database timestamp to UTC Date object for proper comparison
+      const expiresAt = new Date(r.expiresAt + 'Z'); // Add Z to make it UTC
+      const notExpired = expiresAt > now;
+      return otpMatch && notExpired;
+    })
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+  
+  if (!valid) {
+    console.log('OTP verification failed:', { 
+      email, 
+      otp, 
+      now: now.toISOString(), 
+      found: found.map(f => {
+        const expiresAt = new Date(f.expiresAt + 'Z');
+        return {
+          otp: f.otp, 
+          expiresAt: f.expiresAt,
+          expiresAtUTC: expiresAt.toISOString(),
+          createdAt: f.createdAt,
+          isExpired: expiresAt <= now
+        };
+      }) 
+    });
+    return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+  }
+  
+  // Delete all OTPs for this email (cleanup)
   await db.delete(otps).where(eq(otps.email, email));
   
   // Get user
@@ -143,9 +174,13 @@ router.post('/selected-profiles', requireAuth, sanitizeInput, validate(schemas.u
   
   if (action === 'add') {
     await db.insert(userSelectedProfiles).values({ userId, profileId });
+    // Track profile selection analytics
+    trackProfileSelection(profileId, 'select')(req, res, () => {});
     res.json({ success: true });
   } else {
     await db.delete(userSelectedProfiles).where(and(eq(userSelectedProfiles.userId, userId), eq(userSelectedProfiles.profileId, profileId)));
+    // Track profile unselection analytics
+    trackProfileSelection(profileId, 'unselect')(req, res, () => {});
     res.json({ success: true });
   }
 });

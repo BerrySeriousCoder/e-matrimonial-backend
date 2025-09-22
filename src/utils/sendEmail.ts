@@ -7,6 +7,7 @@ export async function sendEmail({
   from,
   subject,
   text,
+  html,
   replyTo,
   unsubscribeUrl,
 }: {
@@ -14,6 +15,7 @@ export async function sendEmail({
   from?: string;
   subject: string;
   text: string;
+  html?: string;
   replyTo?: string;
   unsubscribeUrl?: string;
 }) {
@@ -22,6 +24,7 @@ export async function sendEmail({
     from: from || process.env.SENDGRID_FROM_EMAIL!,
     subject,
     text,
+    html,
     mailSettings: {
       sandboxMode: { enable: false },
     },

@@ -6,6 +6,9 @@ import { sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { validate, sanitizeInput, validateQuery, schemas } from '../middleware/validation';
 import { userAuth } from '../middleware/userAuth';
+import { sendEmail } from '../utils/sendEmail';
+import { tmplClientSubmitted } from '../utils/emailTemplates';
+import { trackAnalytics } from '../middleware/analytics';
 
 const router = Router();
 
@@ -21,7 +24,7 @@ router.get('/', validateQuery(schemas.postsQuery), async (req, res) => {
   // Build where conditions
   const whereConditions = [
     eq(posts.status, 'published'),
-    gt(posts.expiresAt, new Date())
+    gt(posts.expiresAt, new Date().toISOString())
   ];
 
   // Add lookingFor filter if provided
@@ -135,7 +138,7 @@ router.get('/:id', async (req, res) => {
     .where(and(
       eq(posts.id, id),
       eq(posts.status, 'published'),
-      gt(posts.expiresAt, new Date())
+      gt(posts.expiresAt, new Date().toISOString())
     ));
   
   if (!result.length) return res.status(404).json({ error: 'Not found' });
@@ -151,14 +154,45 @@ router.post('/', sanitizeInput, validate(schemas.createPost), async (req, res) =
     lookingFor, 
     duration, 
     fontSize, 
-    bgColor 
+    bgColor,
+    couponCode
   } = req.body;
 
   // Verify OTP
   const now = new Date();
   const found = await db.select().from(otps).where(eq(otps.email, email));
-  const valid = found.find(r => r.otp === otp && r.expiresAt > now);
-  if (!valid) return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+  
+  // Find the most recent valid OTP
+  const valid = found
+    .filter(r => {
+      const otpMatch = r.otp === otp;
+      // Convert database timestamp to UTC Date object for proper comparison
+      const expiresAt = new Date(r.expiresAt + 'Z'); // Add Z to make it UTC
+      const notExpired = expiresAt > now;
+      return otpMatch && notExpired;
+    })
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+  
+  if (!valid) {
+    console.log('OTP verification failed:', { 
+      email, 
+      otp, 
+      now: now.toISOString(), 
+      found: found.map(f => {
+        const expiresAt = new Date(f.expiresAt + 'Z');
+        return {
+          otp: f.otp, 
+          expiresAt: f.expiresAt,
+          expiresAtUTC: expiresAt.toISOString(),
+          createdAt: f.createdAt,
+          isExpired: expiresAt <= now
+        };
+      }) 
+    });
+    return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+  }
+  
+  // Delete all OTPs for this email (cleanup)
   await db.delete(otps).where(eq(otps.email, email));
 
   // Create post (expiresAt will be set when admin approves)
@@ -168,15 +202,33 @@ router.post('/', sanitizeInput, validate(schemas.createPost), async (req, res) =
     lookingFor,
     fontSize,
     bgColor,
+    couponCode: couponCode || null,
     status: 'pending'
   }).returning();
 
-  res.json({ success: true, message: 'Post created and pending approval', postId: result[0].id });
+  // Email confirmation to user
+  try {
+    const { html, text } = tmplClientSubmitted({ email, content, lookingFor });
+    sendEmail({ to: email, subject: '[E‑Matrimonials] Your ad request was submitted', text, html });
+  } catch (e) {
+    console.error('Client submit email error:', e);
+  }
+
+  // Track analytics event
+  trackAnalytics('ad_submission', {
+    duration,
+    fontSize,
+    lookingFor,
+    characterCount: content.length,
+    couponCode: couponCode || null
+  })(req, res, () => {
+    res.json({ success: true, message: 'Post created and pending approval', postId: result[0].id });
+  });
 });
 
 // POST /api/posts/authenticated - create post for authenticated users (no OTP required)
 router.post('/authenticated', userAuth, sanitizeInput, validate(schemas.createAuthenticatedPost), async (req: any, res) => {
-  const { content, lookingFor, duration, fontSize, bgColor } = req.body;
+  const { content, lookingFor, duration, fontSize, bgColor, couponCode } = req.body;
   const userEmail = req.user.email; // From JWT token
 
   // Create post (expiresAt will be set when admin approves)
@@ -186,10 +238,27 @@ router.post('/authenticated', userAuth, sanitizeInput, validate(schemas.createAu
     lookingFor,
     fontSize,
     bgColor,
+    couponCode: couponCode || null,
     status: 'pending'
   }).returning();
 
-  res.json({ success: true, message: 'Post created and pending approval', postId: result[0].id });
+  try {
+    const { html, text } = tmplClientSubmitted({ email: userEmail, content, lookingFor });
+    sendEmail({ to: userEmail, subject: '[E‑Matrimonials] Your ad request was submitted', text, html });
+  } catch (e) {
+    console.error('Authenticated submit email error:', e);
+  }
+
+  // Track analytics event
+  trackAnalytics('ad_submission', {
+    duration,
+    fontSize,
+    lookingFor,
+    characterCount: content.length,
+    couponCode: couponCode || null
+  })(req, res, () => {
+    res.json({ success: true, message: 'Post created and pending approval', postId: result[0].id });
+  });
 });
 
 export default router; 

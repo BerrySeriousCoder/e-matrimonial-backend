@@ -26,6 +26,7 @@ router.get('/', requireSuperadminAuth, validateQuery(schemas.adminManagementQuer
       db.select({
         id: admins.id,
         email: admins.email,
+        role: admins.role,
         createdAt: admins.createdAt,
       })
         .from(admins)
@@ -57,7 +58,7 @@ router.get('/', requireSuperadminAuth, validateQuery(schemas.adminManagementQuer
 // POST /api/admin/management - Create new admin
 router.post('/', requireSuperadminAuth, sanitizeInput, validate(schemas.createAdmin), async (req: AdminRequest, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, role } = req.body as any;
 
     // Check if admin already exists
     const existingAdmin = await db.select().from(admins).where(eq(admins.email, email));
@@ -76,10 +77,12 @@ router.post('/', requireSuperadminAuth, sanitizeInput, validate(schemas.createAd
       .values({
         email,
         password: hashedPassword,
+        role: role === 'data_entry' ? 'data_entry' : 'admin',
       })
       .returning({
         id: admins.id,
         email: admins.email,
+        role: admins.role,
         createdAt: admins.createdAt,
       });
 
@@ -88,7 +91,7 @@ router.post('/', requireSuperadminAuth, sanitizeInput, validate(schemas.createAd
       action: 'create_admin',
       entityType: 'admin',
       entityId: newAdmin.id,
-      details: `Superadmin ${req.admin!.email} created new admin: ${email}`,
+      details: `Superadmin ${req.admin!.email} created new admin: ${email} with role ${newAdmin.role}`,
     });
 
     res.status(201).json({
@@ -99,6 +102,31 @@ router.post('/', requireSuperadminAuth, sanitizeInput, validate(schemas.createAd
   } catch (error) {
     console.error('Error creating admin:', error);
     res.status(500).json({ success: false, error: 'Failed to create admin' });
+  }
+});
+
+// PUT /api/admin/management/:id/role - Update admin role
+router.put('/:id/role', requireSuperadminAuth, async (req: AdminRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.body as any;
+    if (!['admin', 'data_entry', 'superadmin'].includes(role)) {
+      return res.status(400).json({ success: false, error: 'Invalid role' });
+    }
+
+    await db.update(admins).set({ role }).where(eq(admins.id, Number(id)));
+
+    await logAdminAction(req, {
+      action: 'update_admin_role',
+      entityType: 'admin',
+      entityId: Number(id),
+      details: `Superadmin ${req.admin!.email} set role to ${role}`,
+    });
+
+    res.json({ success: true, message: 'Admin role updated successfully' });
+  } catch (error) {
+    console.error('Error updating admin role:', error);
+    res.status(500).json({ success: false, error: 'Failed to update admin role' });
   }
 });
 

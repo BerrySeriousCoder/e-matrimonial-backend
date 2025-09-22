@@ -7,7 +7,13 @@ import { admins, posts, users, adminLogs } from '../db/schema';
 import { requireAdminAuth, requireSuperadminAuth, AdminRequest, isSuperadmin } from '../middleware/adminAuth';
 import { logAdminAction } from '../utils/adminLogger';
 import { validate, sanitizeInput, validateQuery, schemas } from '../middleware/validation';
+import { sendEmail } from '../utils/sendEmail';
+import { tmplPublished } from '../utils/emailTemplates';
+import { calculatePaymentAmount } from '../utils/paymentCalculation';
+import RazorpayService from '../utils/razorpayService';
+import { tmplPaymentRequired } from '../utils/emailTemplates';
 import { createRateLimiters } from '../middleware/security';
+import { trackAnalytics, trackDataEntryPerformance } from '../middleware/analytics';
 
 const router = express.Router();
 
@@ -32,8 +38,9 @@ router.post('/login', adminAuthLimiter, sanitizeInput, validate(schemas.adminLog
     }
 
     const isSuperadminUser = isSuperadmin(admin.email);
+    const role: 'superadmin' | 'admin' | 'data_entry' = isSuperadminUser ? 'superadmin' : (admin as any).role || 'admin';
     const token = jwt.sign(
-      { adminId: admin.id, email: admin.email, isSuperadmin: isSuperadminUser },
+      { adminId: admin.id, email: admin.email, isSuperadmin: isSuperadminUser, role },
       process.env.JWT_SECRET!,
       { expiresIn: '24h' }
     );
@@ -50,7 +57,7 @@ router.post('/login', adminAuthLimiter, sanitizeInput, validate(schemas.adminLog
       success: true,
       message: 'Login successful',
       token,
-      admin: { id: admin.id, email: admin.email, isSuperadmin: isSuperadminUser }
+      admin: { id: admin.id, email: admin.email, isSuperadmin: isSuperadminUser, role }
     });
 
   } catch (error) {
@@ -69,6 +76,7 @@ router.get('/profile', requireAdminAuth, async (req: AdminRequest, res) => {
     }
 
     const isSuperadminUser = isSuperadmin(admin.email);
+    const role: 'superadmin' | 'admin' | 'data_entry' = isSuperadminUser ? 'superadmin' : (admin as any).role || 'admin';
 
     res.json({
       success: true,
@@ -76,6 +84,7 @@ router.get('/profile', requireAdminAuth, async (req: AdminRequest, res) => {
         id: admin.id, 
         email: admin.email, 
         isSuperadmin: isSuperadminUser,
+        role,
         createdAt: admin.createdAt 
       }
     });
@@ -132,9 +141,9 @@ router.get('/posts', requireAdminAuth, validateQuery(schemas.adminPostsQuery), a
 // Update Post Status
 router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res) => {
   const { id } = req.params;
-  const { status } = req.body;
+  let { status } = req.body;
 
-  if (!status || !['pending', 'published', 'archived', 'deleted', 'expired'].includes(status)) {
+  if (!status || !['pending', 'published', 'archived', 'deleted', 'expired', 'edited', 'payment_pending'].includes(status)) {
     return res.status(400).json({ success: false, message: 'Valid status required' });
   }
 
@@ -146,20 +155,85 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
       return res.status(404).json({ success: false, message: 'Post not found' });
     }
 
-    // Update post status and set expiresAt if publishing
+    // If admin is trying to publish a pending post, redirect to payment_pending flow
+    if (status === 'published' && currentPost.status === 'pending') {
+      status = 'payment_pending';
+    }
+
+    // Update post status and handle payment flow
     let updateData: any = { status };
+    let paymentLink = null;
     
     if (status === 'published') {
-      // Set expiresAt to current date + 28 days (default duration)
+      // For direct publishing (bypass payment), set expiresAt to current date + duration
       const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 28);
-      updateData.expiresAt = expiresAt;
+      const duration = currentPost.duration || 14; // Default to 14 days if not set
+      expiresAt.setDate(expiresAt.getDate() + duration);
+      updateData.expiresAt = expiresAt.toISOString();
+    } else if (status === 'payment_pending') {
+      // Calculate payment amount and create payment link
+      try {
+        const paymentCalculation = await calculatePaymentAmount(
+          currentPost.content,
+          currentPost.fontSize as 'default' | 'large',
+          currentPost.duration as 14 | 21 | 28,
+          currentPost.couponCode || undefined
+        );
+
+        // Create payment link
+        paymentLink = await RazorpayService.createPaymentLink(
+          paymentCalculation.finalAmount,
+          currentPost.id,
+          currentPost.email,
+          `Matrimonial Ad - ${currentPost.lookingFor === 'bride' ? 'Bride' : 'Groom'} Profile`
+        );
+
+        // Update post with payment details
+        updateData.baseAmount = paymentCalculation.baseAmount;
+        updateData.finalAmount = paymentCalculation.finalAmount;
+        updateData.couponCode = currentPost.couponCode;
+      } catch (error) {
+        console.error('Payment calculation/link creation error:', error);
+        return res.status(500).json({ 
+          success: false, 
+          message: 'Failed to create payment link. Please try again.' 
+        });
+      }
     }
     
     const [updatedPost] = await db.update(posts)
       .set(updateData)
       .where(eq(posts.id, Number(id)))
       .returning();
+
+    // Track analytics event
+    if (status === 'published' || status === 'payment_pending') {
+      trackAnalytics('ad_approval', {
+        postId: Number(id),
+        adminId: req.admin!.adminId
+      })(req, res, () => {});
+      
+      // Track data entry performance if post was created by data entry employee
+      if (currentPost.createdByAdminId) {
+        trackDataEntryPerformance(currentPost.createdByAdminId.toString(), 'approve', {
+          postId: Number(id)
+        })(req, res, () => {});
+      }
+    } else if (status === 'archived' || status === 'deleted') {
+      trackAnalytics('ad_rejection', {
+        postId: Number(id),
+        adminId: req.admin!.adminId,
+        reason: status
+      })(req, res, () => {});
+      
+      // Track data entry performance if post was created by data entry employee
+      if (currentPost.createdByAdminId) {
+        trackDataEntryPerformance(currentPost.createdByAdminId.toString(), 'reject', {
+          postId: Number(id),
+          reason: status
+        })(req, res, () => {});
+      }
+    }
 
     // Log the action
     let actionType = 'delete_post';
@@ -168,6 +242,9 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
     if (status === 'published') {
       actionType = 'approve_post';
       actionVerb = 'approved';
+    } else if (status === 'payment_pending') {
+      actionType = 'approve_post_payment';
+      actionVerb = 'approved for payment';
     } else if (status === 'archived') {
       actionType = 'archive_post';
       actionVerb = 'archived';
@@ -178,9 +255,40 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
       entityType: 'post',
       entityId: Number(id),
       oldData: { status: currentPost.status },
-      newData: { status },
+      newData: { status, paymentLink: paymentLink?.short_url },
       details: `Admin ${req.admin!.email} ${actionVerb} post ${id}`,
     });
+
+    // Send appropriate email based on status
+    try {
+      if (status === 'published') {
+        const { html, text } = tmplPublished({ 
+          email: currentPost.email, 
+          expiresAt: updateData.expiresAt 
+        });
+        sendEmail({ 
+          to: currentPost.email, 
+          subject: '[E‑Matrimonials] Your ad is published', 
+          text, 
+          html 
+        });
+      } else if (status === 'payment_pending' && paymentLink) {
+        const { html, text } = tmplPaymentRequired({ 
+          email: currentPost.email,
+          paymentLink: paymentLink.short_url,
+          amount: updateData.finalAmount,
+          postId: currentPost.id
+        });
+        sendEmail({ 
+          to: currentPost.email, 
+          subject: '[E‑Matrimonials] Payment required to publish your ad', 
+          text, 
+          html 
+        });
+      }
+    } catch (e) {
+      console.error('Email sending error:', e);
+    }
 
     res.json({
       success: true,
@@ -234,6 +342,7 @@ router.post('/posts', requireAdminAuth, async (req: AdminRequest, res) => {
     // Calculate expiresAt
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + (duration || 20));
+    const expiresAtString = expiresAt.toISOString();
 
     // Create post
     const [newPost] = await db.insert(posts)
@@ -242,7 +351,7 @@ router.post('/posts', requireAdminAuth, async (req: AdminRequest, res) => {
         content,
         userId,
         lookingFor,
-        expiresAt,
+        expiresAt: expiresAtString,
         fontSize: fontSize || 'default',
         bgColor: bgColor || null,
         status: 'published' // Admin created posts are published directly
@@ -327,8 +436,9 @@ router.get('/users/:id/posts', requireAdminAuth, async (req: AdminRequest, res) 
 
 // Get Admin Logs (Superadmin Only)
 router.get('/logs', requireSuperadminAuth, async (req: AdminRequest, res) => {
-  const { page = 1, action, adminId } = req.query;
-  const limit = 50;
+  const { page = 1, action, adminId, limit: limitParam } = req.query as any;
+  // Default 10 per page; cap to 100 to avoid abuse
+  const limit = Math.min(100, Math.max(1, Number(limitParam) || 10));
   const offset = (Number(page) - 1) * limit;
 
   try {
@@ -375,7 +485,8 @@ router.get('/logs', requireSuperadminAuth, async (req: AdminRequest, res) => {
       logs: logsData,
       total,
       page: Number(page),
-      totalPages
+      totalPages,
+      pageSize: limit
     });
 
   } catch (error) {

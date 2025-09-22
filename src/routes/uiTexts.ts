@@ -49,7 +49,7 @@ router.put('/admin/:key', requireSuperadminAuth, sanitizeInput, validate(schemas
 
     await db
       .update(uiTexts)
-      .set({ value, updatedAt: new Date() })
+      .set({ value, updatedAt: new Date().toISOString() })
       .where(eq(uiTexts.key, key));
 
   res.json({

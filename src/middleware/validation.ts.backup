@@ -1,15 +1,6 @@
 import Joi from 'joi';
 import { Request, Response, NextFunction } from 'express';
 
-// Allowed background colors - only 5 blue and pink shades
-const ALLOWED_BG_COLORS = [
-  '#ffffff', // Default White
-  '#e6f3ff', // Light Blue
-  '#cce7ff', // Soft Blue
-  '#ffe6f0', // Light Pink
-  '#ffcce6'  // Soft Pink
-];
-
 // Validation schemas
 export const schemas = {
   // User registration
@@ -43,16 +34,15 @@ export const schemas = {
     otp: Joi.string().length(6).pattern(/^\d{6}$/).required()
   }),
 
-  // Post creation - Updated for payment system
+  // Post creation - Fixed to match database schema
   createPost: Joi.object({
     email: Joi.string().email().required().max(255),
     content: Joi.string().min(10).max(1000).required(),
     otp: Joi.string().length(6).pattern(/^\d{6}$/).required(),
     lookingFor: Joi.string().valid('bride', 'groom').required(),
-    duration: Joi.number().integer().valid(14, 21, 28).required(), // 2, 3, 4 weeks
-    fontSize: Joi.string().valid('default', 'large').default('default'), // Removed 'medium'
-    bgColor: Joi.string().valid(...ALLOWED_BG_COLORS).default('#ffffff'),
-    couponCode: Joi.string().optional().allow('')
+    duration: Joi.number().integer().min(28).max(56).required(),
+    fontSize: Joi.string().valid('default', 'medium', 'large').default('default'),
+    bgColor: Joi.string().max(50).pattern(/^#[0-9A-Fa-f]{6}$/).default('#ffffff')
   }),
 
   // Email sending (anonymous users)
@@ -69,14 +59,13 @@ export const schemas = {
     postId: Joi.number().integer().positive().required()
   }),
 
-  // Authenticated post creation (logged-in users) with restricted colors
+  // Authenticated post creation (logged-in users)
   createAuthenticatedPost: Joi.object({
     content: Joi.string().min(10).max(1000).required(),
     lookingFor: Joi.string().valid('bride', 'groom').required(),
-    duration: Joi.number().integer().valid(14, 21, 28).required(), // 2, 3, 4 weeks
-    fontSize: Joi.string().valid('default', 'large').default('default'), // Removed 'medium'
-    bgColor: Joi.string().valid(...ALLOWED_BG_COLORS).default('#ffffff'),
-    couponCode: Joi.string().optional().allow('')
+    duration: Joi.number().integer().min(28).max(56).required(),
+    fontSize: Joi.string().valid('default', 'medium', 'large').default('default'),
+    bgColor: Joi.string().max(50).pattern(/^#[0-9A-Fa-f]{6}$/).default('#ffffff')
   }),
 
   // Admin login
@@ -88,8 +77,7 @@ export const schemas = {
   // Admin creation
   createAdmin: Joi.object({
     email: Joi.string().email().required().max(255),
-    password: Joi.string().min(6).max(100).required(),
-    role: Joi.string().valid('admin', 'data_entry').optional()
+    password: Joi.string().min(6).max(100).required()
   }),
 
   // Post approval/rejection
@@ -121,7 +109,7 @@ export const schemas = {
 
   // Admin posts query
   adminPostsQuery: Joi.object({
-    status: Joi.string().valid('pending', 'published', 'archived', 'deleted', 'expired', 'edited', 'all').optional(),
+    status: Joi.string().valid('pending', 'published', 'archived', 'deleted', 'all').optional(),
     search: Joi.string().max(100).optional(),
     page: Joi.number().integer().min(1).default(1)
   }),
@@ -166,30 +154,8 @@ export const schemas = {
     isActive: Joi.boolean().required()
   }),
 
-  // Admin post creation with restricted colors - Updated for payment system
-  createAdminPost: Joi.object({
-    email: Joi.string().email().required().max(255),
-    content: Joi.string().min(10).max(1000).required(),
-    lookingFor: Joi.string().valid('bride', 'groom').required(),
-    duration: Joi.number().integer().valid(14, 21, 28).required(), // 2, 3, 4 weeks
-    fontSize: Joi.string().valid('default', 'large').default('default'), // Removed 'medium'
-    bgColor: Joi.string().valid(...ALLOWED_BG_COLORS).default('#ffffff'),
-    couponCode: Joi.string().optional().allow('')
-  }),
-
-  // Admin post update with restricted colors
-  updateAdminPost: Joi.object({
-    content: Joi.string().min(10).max(1000).optional(),
-    lookingFor: Joi.string().valid('bride', 'groom').optional(),
-    duration: Joi.number().integer().valid(14, 21, 28).optional(), // 2, 3, 4 weeks
-    fontSize: Joi.string().valid('default', 'large').optional(), // Removed 'medium'
-    bgColor: Joi.string().valid(...ALLOWED_BG_COLORS).optional()
-  }),
 
 };
-
-// Export allowed colors for use in other parts of the application
-export { ALLOWED_BG_COLORS };
 
 // Validation middleware factory
 export const validate = (schema: Joi.ObjectSchema) => {
@@ -271,4 +237,4 @@ export const sanitizeInput = (req: Request, res: Response, next: NextFunction) =
   // Query parameters are validated separately using validateQuery middleware
 
   next();
-};
+}; 

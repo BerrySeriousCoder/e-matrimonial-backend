@@ -28,7 +28,7 @@ const reorderSections = async (targetId: number, newOrder: number) => {
       .update(searchFilterSections)
       .set({ 
         order: sql`${searchFilterSections.order} - 1`,
-        updatedAt: new Date()
+        updatedAt: new Date().toISOString()
       })
       .where(and(
         gte(searchFilterSections.order, oldOrder + 1),
@@ -40,7 +40,7 @@ const reorderSections = async (targetId: number, newOrder: number) => {
       .update(searchFilterSections)
       .set({ 
         order: sql`${searchFilterSections.order} + 1`,
-        updatedAt: new Date()
+        updatedAt: new Date().toISOString()
       })
       .where(and(
         gte(searchFilterSections.order, newOrder),
@@ -74,7 +74,7 @@ const reorderOptions = async (targetId: number, sectionId: number, newOrder: num
       if (allAfter[i].order !== i + 1) {
         await db
           .update(searchFilterOptions)
-          .set({ order: i + 1, updatedAt: new Date() })
+          .set({ order: i + 1, updatedAt: new Date().toISOString() })
           .where(eq(searchFilterOptions.id, allAfter[i].id));
       }
     }
@@ -87,7 +87,7 @@ const reorderOptions = async (targetId: number, sectionId: number, newOrder: num
       .update(searchFilterOptions)
       .set({ 
         order: sql`${searchFilterOptions.order} - 1`,
-        updatedAt: new Date()
+        updatedAt: new Date().toISOString()
       })
       .where(and(
         eq(searchFilterOptions.sectionId, sectionId),
@@ -100,7 +100,7 @@ const reorderOptions = async (targetId: number, sectionId: number, newOrder: num
       .update(searchFilterOptions)
       .set({ 
         order: sql`${searchFilterOptions.order} + 1`,
-        updatedAt: new Date()
+        updatedAt: new Date().toISOString()
       })
       .where(and(
         eq(searchFilterOptions.sectionId, sectionId),
@@ -112,7 +112,7 @@ const reorderOptions = async (targetId: number, sectionId: number, newOrder: num
   // Set the target option's order to the new order
   await db
     .update(searchFilterOptions)
-    .set({ order: newOrder, updatedAt: new Date() })
+    .set({ order: newOrder, updatedAt: new Date().toISOString() })
     .where(eq(searchFilterOptions.id, targetId));
 
   // --- Robust normalization: re-sequence all orders in this section ---
@@ -125,7 +125,7 @@ const reorderOptions = async (targetId: number, sectionId: number, newOrder: num
     if (allAfter[i].order !== i + 1) {
       await db
         .update(searchFilterOptions)
-        .set({ order: i + 1, updatedAt: new Date() })
+        .set({ order: i + 1, updatedAt: new Date().toISOString() })
         .where(eq(searchFilterOptions.id, allAfter[i].id));
     }
   }
@@ -210,7 +210,7 @@ router.post('/sections', requireSuperadminAuth, sanitizeInput, validate(schemas.
         .update(searchFilterSections)
         .set({ 
           order: sql`${searchFilterSections.order} + 1`,
-          updatedAt: new Date()
+          updatedAt: new Date().toISOString()
         })
         .where(gte(searchFilterSections.order, order));
     }
@@ -287,7 +287,7 @@ router.put('/sections/:id', requireSuperadminAuth, sanitizeInput, validate(schem
         description,
         order,
         isActive,
-        updatedAt: new Date(),
+        updatedAt: new Date().toISOString(),
       })
       .where(eq(searchFilterSections.id, parseInt(id)))
       .returning();
@@ -382,7 +382,7 @@ router.post('/options', requireSuperadminAuth, sanitizeInput, validate(schemas.c
         .update(searchFilterOptions)
         .set({ 
           order: sql`${searchFilterOptions.order} + 1`,
-          updatedAt: new Date()
+          updatedAt: new Date().toISOString()
         })
         .where(and(
           eq(searchFilterOptions.sectionId, sectionId),
@@ -473,7 +473,7 @@ router.put('/options/:id', requireSuperadminAuth, sanitizeInput, validate(schema
         value,
         displayName,
         isActive,
-        updatedAt: new Date(),
+        updatedAt: new Date().toISOString(),
       })
       .where(eq(searchFilterOptions.id, parseInt(id)))
       .returning();
@@ -494,7 +494,7 @@ router.put('/options/:id', requireSuperadminAuth, sanitizeInput, validate(schema
           if (oldSectionOptions[i].order !== i + 1) {
             await db
               .update(searchFilterOptions)
-              .set({ order: i + 1, updatedAt: new Date() })
+              .set({ order: i + 1, updatedAt: new Date().toISOString() })
               .where(eq(searchFilterOptions.id, oldSectionOptions[i].id));
           }
         }

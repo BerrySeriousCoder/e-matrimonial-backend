@@ -6,18 +6,18 @@ const filterTestData = [
   // Complexion & Appearance Tests
   {
     email: 'fairgirl@gmail.com',
-    content: 'Fair and beautiful girl, 25 years old, 5\'6" height. Looking for educated boy from good family. Fair complexion preferred.',
+    content: 'Fair and beautiful girl, 25 years old, 5\'6" height. I am looking for educated boy from good family. Fair complexion preferred.',
     lookingFor: 'groom' as const,
     fontSize: 'default' as const,
-    bgColor: '#f0f8ff',
+    bgColor: '#e6f3ff',
     status: 'published' as const
   },
   {
     email: 'goriboy@gmail.com',
     content: 'Gori boy from Delhi, 28 years, working in IT company. Seeks gori girl for marriage. Contact: gori boy',
     lookingFor: 'bride' as const,
-    fontSize: 'medium' as const,
-    bgColor: '#f5f5dc',
+    fontSize: 'default' as const,
+    bgColor: '#cce7ff',
     status: 'published' as const
   },
   {
@@ -25,15 +25,15 @@ const filterTestData = [
     content: 'Tall handsome boy, 6\'2" height, 30 years old. Working as software engineer. Seeks tall girl.',
     lookingFor: 'bride' as const,
     fontSize: 'large' as const,
-    bgColor: '#f0fff0',
+    bgColor: '#ffe6f0',
     status: 'published' as const
   },
   {
     email: 'wheatishgirl@gmail.com',
-    content: 'Wheatish complexion girl, 26 years, 5\'4". Well educated and cultured. Looking for wheatish boy.',
+    content: 'Wheatish complexion girl, 26 years, 5\'4". Well educated and cultured. I am looking for wheatish boy.',
     lookingFor: 'groom' as const,
     fontSize: 'default' as const,
-    bgColor: '#fff0f5',
+    bgColor: '#ffcce6',
     status: 'published' as const
   },
 
@@ -42,8 +42,8 @@ const filterTestData = [
     email: 'mbaexecutive@gmail.com',
     content: 'MBA from IIM Ahmedabad, working as senior executive in MNC. 32 years old, 5\'10". Seeks MBA girl.',
     lookingFor: 'bride' as const,
-    fontSize: 'medium' as const,
-    bgColor: '#f8f8ff',
+    fontSize: 'default' as const,
+    bgColor: '#e6f3ff',
     status: 'published' as const
   },
   {
@@ -51,7 +51,7 @@ const filterTestData = [
     content: 'B.Tech in Computer Science, working as software developer in tech company. 27 years, 5\'8".',
     lookingFor: 'bride' as const,
     fontSize: 'default' as const,
-    bgColor: '#faf0e6',
+    bgColor: '#cce7ff',
     status: 'published' as const
   },
   {
@@ -59,15 +59,15 @@ const filterTestData = [
     content: 'MBBS doctor working in government hospital. 29 years old, 5\'7". Seeks MBBS or medical professional.',
     lookingFor: 'bride' as const,
     fontSize: 'large' as const,
-    bgColor: '#f0f8ff',
+    bgColor: '#e6f3ff',
     status: 'published' as const
   },
   {
     email: 'iimgraduate@gmail.com',
-    content: 'IIM graduate, working in consulting firm. 31 years, 5\'9". Looking for IIM or top B-school graduate.',
+    content: 'IIM graduate, working in consulting firm. 31 years, 5\'9". I am looking for IIM or top B-school graduate.',
     lookingFor: 'bride' as const,
-    fontSize: 'medium' as const,
-    bgColor: '#f5f5dc',
+    fontSize: 'default' as const,
+    bgColor: '#cce7ff',
     status: 'published' as const
   },
   {
@@ -75,41 +75,41 @@ const filterTestData = [
     content: 'Working in MNC as project manager. 33 years old, 5\'11". Seeks MNC working girl.',
     lookingFor: 'bride' as const,
     fontSize: 'default' as const,
-    bgColor: '#f0fff0',
+    bgColor: '#ffe6f0',
     status: 'published' as const
   },
   {
     email: 'govtofficer@gmail.com',
-    content: 'Government officer in state department. 35 years, 5\'8". Looking for govt job holder.',
+    content: 'Government officer in state department. 35 years, 5\'8". I am looking for govt job holder.',
     lookingFor: 'bride' as const,
     fontSize: 'large' as const,
-    bgColor: '#fff0f5',
+    bgColor: '#ffcce6',
     status: 'published' as const
   },
 
   // Age & Height Tests
   {
     email: 'age25girl@gmail.com',
-    content: '25 years old girl, 5\'6" height. Working as teacher. Looking for boy age 25-30.',
+    content: '25 years old girl, 5\'6" height. Working as teacher. I am looking for boy age 25-30.',
     lookingFor: 'groom' as const,
     fontSize: 'default' as const,
-    bgColor: '#f8f8ff',
+    bgColor: '#e6f3ff',
     status: 'published' as const
   },
   {
     email: 'age30boy@gmail.com',
     content: '30 years old boy, 5\'8" height. Software engineer. Seeks girl age 25-30.',
     lookingFor: 'bride' as const,
-    fontSize: 'medium' as const,
-    bgColor: '#faf0e6',
+    fontSize: 'default' as const,
+    bgColor: '#cce7ff',
     status: 'published' as const
   },
   {
     email: 'height56girl@gmail.com',
-    content: 'Girl with height 5\'6", 26 years old. Working in bank. Looking for boy height 5\'6" or above.',
+    content: 'Girl with height 5\'6", 26 years old. Working in bank. I am looking for boy height 5\'6" or above.',
     lookingFor: 'groom' as const,
     fontSize: 'large' as const,
-    bgColor: '#f0f8ff',
+    bgColor: '#e6f3ff',
     status: 'published' as const
   },
   {
@@ -117,7 +117,7 @@ const filterTestData = [
     content: 'Boy with height 5\'8", 28 years old. Business analyst. Seeks girl height 5\'8" or below.',
     lookingFor: 'bride' as const,
     fontSize: 'default' as const,
-    bgColor: '#f5f5dc',
+    bgColor: '#cce7ff',
     status: 'published' as const
   },
 
@@ -126,16 +126,16 @@ const filterTestData = [
     email: 'nriboy@gmail.com',
     content: 'NRI boy working in USA. 32 years old, 5\'10". Seeks NRI girl or willing to relocate.',
     lookingFor: 'bride' as const,
-    fontSize: 'medium' as const,
-    bgColor: '#f0fff0',
+    fontSize: 'default' as const,
+    bgColor: '#ffe6f0',
     status: 'published' as const
   },
   {
     email: 'greencardgirl@gmail.com',
-    content: 'Girl with green card, working in California. 29 years, 5\'5". Looking for green card holder.',
+    content: 'Girl with green card, working in California. 29 years, 5\'5". I am looking for green card holder.',
     lookingFor: 'groom' as const,
     fontSize: 'large' as const,
-    bgColor: '#fff0f5',
+    bgColor: '#ffcce6',
     status: 'published' as const
   },
   {
@@ -143,17 +143,17 @@ const filterTestData = [
     content: 'Working abroad in UK. 31 years old, 5\'9". Seeks girl working abroad or willing to relocate.',
     lookingFor: 'bride' as const,
     fontSize: 'default' as const,
-    bgColor: '#f8f8ff',
+    bgColor: '#e6f3ff',
     status: 'published' as const
   },
 
   // Abbreviations/SMS Style Tests
   {
     email: 'smgirl@gmail.com',
-    content: 'SM$ girl, 26 years, working in IT. Looking for SM$ boy. Contact for details.',
+    content: 'SM$ girl, 26 years, working in IT. I am looking for SM$ boy. Contact for details.',
     lookingFor: 'groom' as const,
-    fontSize: 'medium' as const,
-    bgColor: '#faf0e6',
+    fontSize: 'default' as const,
+    bgColor: '#cce7ff',
     status: 'published' as const
   },
   {
@@ -161,31 +161,31 @@ const filterTestData = [
     content: 'PQM boy, 28 years, well settled. Seeks PQM girl. Good family background.',
     lookingFor: 'bride' as const,
     fontSize: 'default' as const,
-    bgColor: '#f0f8ff',
+    bgColor: '#e6f3ff',
     status: 'published' as const
   },
   {
     email: 'edugirl@gmail.com',
-    content: 'Edu girl, 25 years, highly educated. Looking for edu boy. Professional background.',
+    content: 'Edu girl, 25 years, highly educated. I am looking for edu boy. Professional background.',
     lookingFor: 'groom' as const,
     fontSize: 'large' as const,
-    bgColor: '#f5f5dc',
+    bgColor: '#cce7ff',
     status: 'published' as const
   },
   {
     email: 'hsomeboy@gmail.com',
     content: 'H\'some boy, 27 years, 5\'10". Working in MNC. Seeks h\'some girl.',
     lookingFor: 'bride' as const,
-    fontSize: 'medium' as const,
-    bgColor: '#f0fff0',
+    fontSize: 'default' as const,
+    bgColor: '#ffe6f0',
     status: 'published' as const
   },
   {
     email: 'bfulgirl@gmail.com',
-    content: 'B\'ful girl, 24 years, 5\'6". Well educated and cultured. Looking for b\'ful boy.',
+    content: 'B\'ful girl, 24 years, 5\'6". Well educated and cultured. I am looking for b\'ful boy.',
     lookingFor: 'groom' as const,
     fontSize: 'default' as const,
-    bgColor: '#fff0f5',
+    bgColor: '#ffcce6',
     status: 'published' as const
   },
 
@@ -195,15 +195,15 @@ const filterTestData = [
     content: 'Manglik boy, 29 years, working as engineer. Seeks manglik girl for marriage.',
     lookingFor: 'bride' as const,
     fontSize: 'large' as const,
-    bgColor: '#f8f8ff',
+    bgColor: '#e6f3ff',
     status: 'published' as const
   },
   {
     email: 'nonmanglikgirl@gmail.com',
-    content: 'Non-manglik girl, 26 years, working in bank. Looking for non-manglik boy.',
+    content: 'Non-manglik girl, 26 years, working in bank. I am looking for non-manglik boy.',
     lookingFor: 'groom' as const,
-    fontSize: 'medium' as const,
-    bgColor: '#faf0e6',
+    fontSize: 'default' as const,
+    bgColor: '#cce7ff',
     status: 'published' as const
   },
 
@@ -213,15 +213,15 @@ const filterTestData = [
     content: 'Fair MBA boy, 30 years, 5\'8", working in MNC. Seeks fair MBA girl.',
     lookingFor: 'bride' as const,
     fontSize: 'default' as const,
-    bgColor: '#f0f8ff',
+    bgColor: '#e6f3ff',
     status: 'published' as const
   },
   {
     email: 'tallnrigirl@gmail.com',
-    content: 'Tall NRI girl, 28 years, 5\'7", working abroad. Looking for tall NRI boy.',
+    content: 'Tall NRI girl, 28 years, 5\'7", working abroad. I am looking for tall NRI boy.',
     lookingFor: 'groom' as const,
-    fontSize: 'medium' as const,
-    bgColor: '#f5f5dc',
+    fontSize: 'default' as const,
+    bgColor: '#cce7ff',
     status: 'published' as const
   },
   {
@@ -229,31 +229,31 @@ const filterTestData = [
     content: 'MBBS manglik boy, 31 years, 5\'9", working as doctor. Seeks MBBS manglik girl.',
     lookingFor: 'bride' as const,
     fontSize: 'large' as const,
-    bgColor: '#f0fff0',
+    bgColor: '#ffe6f0',
     status: 'published' as const
   },
   {
     email: 'hsomegreencard@gmail.com',
-    content: 'H\'some green card holder, 29 years, 5\'10", working in USA. Looking for h\'some green card girl.',
+    content: 'H\'some green card holder, 29 years, 5\'10", working in USA. I am looking for h\'some green card girl.',
     lookingFor: 'bride' as const,
     fontSize: 'default' as const,
-    bgColor: '#fff0f5',
+    bgColor: '#ffcce6',
     status: 'published' as const
   },
   {
     email: 'pqmeduboy@gmail.com',
     content: 'PQM edu boy, 27 years, 5\'8", highly educated. Seeks PQM edu girl.',
     lookingFor: 'bride' as const,
-    fontSize: 'medium' as const,
-    bgColor: '#f8f8ff',
+    fontSize: 'default' as const,
+    bgColor: '#e6f3ff',
     status: 'published' as const
   },
   {
     email: 'bfulgovtgirl@gmail.com',
-    content: 'B\'ful govt job girl, 25 years, 5\'5", working in government office. Looking for b\'ful govt boy.',
+    content: 'B\'ful govt job girl, 25 years, 5\'5", working in government office. I am looking for b\'ful govt boy.',
     lookingFor: 'groom' as const,
     fontSize: 'large' as const,
-    bgColor: '#faf0e6',
+    bgColor: '#cce7ff',
     status: 'published' as const
   },
   {
@@ -261,15 +261,15 @@ const filterTestData = [
     content: 'Fair IIM graduate non-manglik boy, 32 years, 5\'9", working in consulting. Seeks fair IIM non-manglik girl.',
     lookingFor: 'bride' as const,
     fontSize: 'default' as const,
-    bgColor: '#f0f8ff',
+    bgColor: '#e6f3ff',
     status: 'published' as const
   },
   {
     email: 'tallmbaworkingabroad@gmail.com',
-    content: 'Tall MBA working abroad, 30 years, 5\'11", in UK. Looking for tall MBA working abroad girl.',
+    content: 'Tall MBA working abroad, 30 years, 5\'11", in UK. I am looking for tall MBA working abroad girl.',
     lookingFor: 'bride' as const,
-    fontSize: 'medium' as const,
-    bgColor: '#f5f5dc',
+    fontSize: 'default' as const,
+    bgColor: '#cce7ff',
     status: 'published' as const
   },
   {
@@ -277,15 +277,15 @@ const filterTestData = [
     content: 'SM$ B.Tech green card holder, 28 years, 5\'8", in California. Seeks SM$ B.Tech green card girl.',
     lookingFor: 'bride' as const,
     fontSize: 'large' as const,
-    bgColor: '#f0fff0',
+    bgColor: '#ffe6f0',
     status: 'published' as const
   },
   {
     email: 'hsomegovtmanglik@gmail.com',
-    content: 'H\'some govt job manglik boy, 29 years, 5\'9", working in government. Looking for h\'some govt manglik girl.',
+    content: 'H\'some govt job manglik boy, 29 years, 5\'9", working in government. I am looking for h\'some govt manglik girl.',
     lookingFor: 'bride' as const,
     fontSize: 'default' as const,
-    bgColor: '#fff0f5',
+    bgColor: '#ffcce6',
     status: 'published' as const
   }
 ];
@@ -311,7 +311,7 @@ async function seedFilterTestData() {
     const postsWithUsers = filterTestData.map((postData, index) => ({
       ...postData,
       userId: createdUsers[index].id,
-      expiresAt: new Date(Date.now() + (30 * 24 * 60 * 60 * 1000)), // 30 days from now
+      expiresAt: new Date(Date.now() + (30 * 24 * 60 * 60 * 1000)).toISOString(), // 30 days from now
     }));
 
     await db.insert(posts).values(postsWithUsers);

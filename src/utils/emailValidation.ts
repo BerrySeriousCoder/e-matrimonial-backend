@@ -35,7 +35,7 @@ export const checkHourlyLimit = async (userId: number): Promise<boolean> => {
   const countResult = await db.select({ count: count() }).from(postEmails)
     .where(and(
       eq(postEmails.userId, userId),
-      gte(postEmails.sentAt, oneHourAgo)
+      gte(postEmails.sentAt, oneHourAgo.toISOString())
     ));
   
   return countResult[0].count < 50;
@@ -75,7 +75,7 @@ export const checkCooldown = async (userId: number): Promise<boolean> => {
   const recentEmail = await db.select().from(postEmails)
     .where(and(
       eq(postEmails.userId, userId),
-      gte(postEmails.sentAt, fifteenSecondsAgo)
+      gte(postEmails.sentAt, fifteenSecondsAgo.toISOString())
     ))
     .limit(1);
   
@@ -99,7 +99,7 @@ export const recordEmailSent = async (email: string, postId: number, userId?: nu
     // Update existing record with user_id if it's null (anonymous -> authenticated)
     if (!existingRecord[0].userId && userId) {
       await db.update(postEmails)
-        .set({ userId: userId, sentAt: new Date() })
+        .set({ userId: userId, sentAt: new Date().toISOString() })
         .where(eq(postEmails.id, existingRecord[0].id));
     }
     // If record already has user_id, do nothing (already recorded)
@@ -109,7 +109,7 @@ export const recordEmailSent = async (email: string, postId: number, userId?: nu
       userId: userId || null,
       email: email,
       postId,
-      sentAt: new Date()
+      sentAt: new Date().toISOString()
     });
   }
 };

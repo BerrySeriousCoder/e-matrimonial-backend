@@ -13,7 +13,7 @@ router.post('/request', sanitizeInput, validate(schemas.requestOtp), async (req,
   
   // Generate OTP
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min from now
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min from now
   
   // Save OTP in DB
   await db.insert(otps).values({ email, otp, expiresAt });
@@ -38,13 +38,38 @@ router.post('/verify', sanitizeInput, validate(schemas.verifyOtp), async (req, r
   // Verify OTP
   const now = new Date();
   const found = await db.select().from(otps).where(eq(otps.email, email));
-  const valid = found.find(r => r.otp === otp && r.expiresAt > now);
+  
+  // Find the most recent valid OTP
+  const valid = found
+    .filter(r => {
+      const otpMatch = r.otp === otp;
+      // Convert database timestamp to UTC Date object for proper comparison
+      const expiresAt = new Date(r.expiresAt + 'Z'); // Add Z to make it UTC
+      const notExpired = expiresAt > now;
+      return otpMatch && notExpired;
+    })
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
   
   if (!valid) {
+    console.log('OTP verification failed:', { 
+      email, 
+      otp, 
+      now: now.toISOString(), 
+      found: found.map(f => {
+        const expiresAt = new Date(f.expiresAt + 'Z');
+        return {
+          otp: f.otp, 
+          expiresAt: f.expiresAt,
+          expiresAtUTC: expiresAt.toISOString(),
+          createdAt: f.createdAt,
+          isExpired: expiresAt <= now
+        };
+      }) 
+    });
     return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
   }
   
-  // Delete used OTP
+  // Delete all OTPs for this email (cleanup)
   await db.delete(otps).where(eq(otps.email, email));
   
   res.json({ success: true, message: 'OTP verified' });

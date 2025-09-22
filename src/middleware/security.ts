@@ -137,7 +137,9 @@ export const validateEnvironment = () => {
     'JWT_SECRET',
     'DATABASE_URL',
     'SENDGRID_API_KEY',
-    'SUPERADMIN_EMAIL'
+    'SUPERADMIN_EMAIL',
+    'RAZORPAY_KEY_ID',
+    'RAZORPAY_SECRET'
   ];
 
   const missing = requiredEnvVars.filter(envVar => !process.env[envVar]);

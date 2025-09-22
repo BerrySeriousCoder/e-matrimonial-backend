@@ -9,6 +9,11 @@ import userRouter from './routes/user';
 import adminRouter from './routes/admin';
 import adminManagementRouter from './routes/adminManagement';
 import searchFiltersRouter from './routes/searchFilters';
+import dataEntryRouter from './routes/dataEntry';
+import paymentRouter from './routes/payment';
+import adminPaymentRouter from './routes/adminPayment';
+import webhookRouter from './routes/webhook';
+import analyticsRouter from './routes/analytics';
 
 // Security imports
 import {
@@ -43,6 +48,9 @@ app.use(requestSizeLimiter);
 
 // CORS configuration (you'll configure this later)
 app.use(cors());
+
+// Webhook routes (must be before JSON parsing)
+app.use('/api/webhook', webhookRouter);
 
 // Body parser with limits
 app.use(express.json({ limit: '1mb' }));
@@ -84,9 +92,17 @@ app.use('/api/user', authLimiter, userRouter);
 // Admin routes with separate rate limiters
 app.use('/api/admin', adminLimiter, adminRouter);
 app.use('/api/admin/management', superAdminLimiter, adminManagementRouter);
+app.use('/api/data-entry', adminLimiter, dataEntryRouter);
 
 // Search filters routes
 app.use('/api/search-filters', generalLimiter, searchFiltersRouter);
+
+// Payment routes
+app.use('/api/payment', generalLimiter, paymentRouter);
+app.use('/api/admin/payment', adminLimiter, adminPaymentRouter);
+
+// Analytics routes
+app.use('/api/analytics', adminLimiter, analyticsRouter);
 
 // Apply specific rate limiting to post creation
 app.use('/api/posts', postLimiter);

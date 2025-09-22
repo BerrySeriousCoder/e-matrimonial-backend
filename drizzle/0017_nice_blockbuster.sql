@@ -1,0 +1,1 @@
+DROP INDEX "idx_admin_analytics_event_type";

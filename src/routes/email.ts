@@ -11,6 +11,7 @@ import {
   recordEmailSent, 
   incrementDailyCount 
 } from '../utils/emailValidation';
+import { trackEmailEvent } from '../middleware/analytics';
 
 const router = express.Router();
 
@@ -24,7 +25,7 @@ router.post('/send', sanitizeInput, validate(schemas.sendEmail), async (req, res
       .where(and(
         eq(otps.email, email),
         eq(otps.otp, otp),
-        gte(otps.expiresAt, new Date())
+        gte(otps.expiresAt, new Date().toISOString())
       ));
 
     if (otpRecord.length === 0) {
@@ -74,6 +75,9 @@ Reply directly to this email to respond.`,
 
     // Record the email sent
     await recordEmailSent(email, postId);
+
+    // Track email analytics
+    trackEmailEvent(email, post[0].email)(req, res, () => {});
 
     // Delete used OTP
     await db.delete(otps).where(eq(otps.id, otpRecord[0].id));
@@ -140,6 +144,9 @@ Reply directly to this email to respond.`,
     // Record the email and increment daily count
     await recordEmailSent(userEmail, postId, userId);
     await incrementDailyCount(userId);
+
+    // Track email analytics
+    trackEmailEvent(userEmail, post[0].email)(req, res, () => {});
 
     res.json({
       success: true,
