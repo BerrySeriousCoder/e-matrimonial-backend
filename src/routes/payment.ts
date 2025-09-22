@@ -27,6 +27,13 @@ const paymentSchemas = {
     paymentLinkStatus: Joi.string().required(),
     signature: Joi.string().required(),
   }),
+  verifyCallback: Joi.object({
+    payment_link_id: Joi.string().required(),
+    razorpay_payment_id: Joi.string().required(),
+    payment_link_reference_id: Joi.string().required(),
+    payment_link_status: Joi.string().required(),
+    razorpay_signature: Joi.string().optional(),
+  }),
   applyCoupon: Joi.object({
     couponCode: Joi.string().required(),
     content: Joi.string().min(10).max(1000).required(),
@@ -228,6 +235,23 @@ router.post('/verify', sanitizeInput, validate(paymentSchemas.verifyPayment), as
   } catch (error) {
     console.error('Payment verification error:', error);
     res.status(500).json({ success: false, message: 'Failed to verify payment' });
+  }
+});
+
+// POST /api/payment/verify-callback - verify Razorpay redirect params for UX (non-authoritative)
+router.post('/verify-callback', sanitizeInput, validate(paymentSchemas.verifyCallback), async (req, res) => {
+  try {
+    const { payment_link_id, razorpay_payment_id, payment_link_reference_id, payment_link_status } = req.body;
+    const ok = RazorpayService.verifyPaymentSignature(
+      payment_link_id,
+      razorpay_payment_id,
+      payment_link_reference_id,
+      payment_link_status
+    );
+    return res.json({ success: ok });
+  } catch (error) {
+    console.error('Payment verify-callback error:', error);
+    return res.status(400).json({ success: false, message: 'Invalid signature' });
   }
 });
 
