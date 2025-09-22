@@ -79,3 +79,13 @@ temp/
 
 .env
 .env.backup
+
+# Local helper/test scripts (not for version control)
+test-*.js
+test-*.ts
+check-events.js
+testReorderDirect.ts
+docker-postgres-setup.md
+FIXES_SUMMARY.md
+VALIDATION_SUMMARY.md
+SECURITY.md
