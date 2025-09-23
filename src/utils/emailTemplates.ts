@@ -19,9 +19,6 @@ export function brandWrapper(subject: string, bodyHtml: string, bodyText: string
             <td style="padding:16px 24px;border-top:1px solid #eef2f7;color:#475467;font-size:12px;">
               <div>You're receiving this email from E‑Matrimonials.</div>
               <div style="margin-top:6px;">To stop receiving these, use the Unsubscribe link below.</div>
-              <div style="margin-top:10px;">
-                <a href="#" style="color:#1d4ed8;text-decoration:underline;">Unsubscribe</a>
-              </div>
             </td>
           </tr>
         </table>
