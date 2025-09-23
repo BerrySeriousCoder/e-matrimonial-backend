@@ -3,6 +3,7 @@ import { db } from '../db';
 import { otps } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { sendEmail } from '../utils/sendEmail';
+import { tmplOtp } from '../utils/emailTemplates';
 import { validate, sanitizeInput, schemas } from '../middleware/validation';
 
 const router = Router();
@@ -20,11 +21,8 @@ router.post('/request', sanitizeInput, validate(schemas.requestOtp), async (req,
   
   // Send OTP via email
   try {
-    await sendEmail({
-      to: email,
-      subject: 'Your OTP for E-Matrimonial',
-      text: `Your OTP is: ${otp}\nIt is valid for 10 minutes.`,
-    });
+    const { html, text } = tmplOtp({ otp });
+    await sendEmail({ to: email, subject: 'Your OTP for E‑Matrimonial', text, html, disableUnsubscribe: true });
     res.json({ success: true, message: 'OTP sent' });
   } catch (e) {
     res.status(500).json({ success: false, message: 'Failed to send OTP' });

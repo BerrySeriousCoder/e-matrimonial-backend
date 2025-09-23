@@ -10,6 +10,7 @@ export async function sendEmail({
   html,
   replyTo,
   unsubscribeUrl,
+  disableUnsubscribe,
 }: {
   to: string;
   from?: string;
@@ -18,6 +19,7 @@ export async function sendEmail({
   html?: string;
   replyTo?: string;
   unsubscribeUrl?: string;
+  disableUnsubscribe?: boolean;
 }) {
   const msg: any = {
     to,
@@ -25,15 +27,26 @@ export async function sendEmail({
     subject,
     text,
     html,
+    // Enable/disable SendGrid Subscription Tracking and ASM per email
+    asm: !disableUnsubscribe && process.env.SENDGRID_UNSUB_GROUP_ID ? { groupId: Number(process.env.SENDGRID_UNSUB_GROUP_ID) } : undefined,
+    trackingSettings: disableUnsubscribe ? { subscriptionTracking: { enable: false } } : { subscriptionTracking: { enable: true } },
     mailSettings: {
       sandboxMode: { enable: false },
     },
   };
   if (replyTo) msg.replyTo = replyTo;
-  if (unsubscribeUrl) {
-    msg.headers = {
-      'List-Unsubscribe': `<${unsubscribeUrl}>`,
-    };
+  // Add List-Unsubscribe headers for native Gmail/Outlook UI
+  // Prefer SendGrid-hosted unsubscribe (provided when Subscription Tracking is enabled)
+  // If caller provides a fallback unsubscribeUrl, include it as well.
+  if (!disableUnsubscribe) {
+    const headers: Record<string, string> = {};
+    headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
+    if (unsubscribeUrl) {
+      headers['List-Unsubscribe'] = `<${unsubscribeUrl}>`;
+    }
+    if (Object.keys(headers).length > 0) {
+      msg.headers = { ...(msg.headers || {}), ...headers };
+    }
   }
   await sgMail.send(msg);
 } 

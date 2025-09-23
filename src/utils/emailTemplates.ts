@@ -1,14 +1,71 @@
 export function brandWrapper(subject: string, bodyHtml: string, bodyText: string) {
   const html = `
-  <div style="font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:#111">
-    <h2 style="margin:0 0 12px">E‑Matrimonials</h2>
-    <p style="margin:0 0 16px;color:#444">${subject}</p>
-    <div style="margin:12px 0 20px;color:#111">${bodyHtml}</div>
-    <hr style="border:none;border-top:1px solid #eee;margin:16px 0" />
-    <p style="font-size:12px;color:#777">This is an automated message. Please do not reply.</p>
-  </div>`;
-  const text = `E-Matrimonials\n${subject}\n\n${bodyText}\n\nThis is an automated message. Please do not reply.`;
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f7fb;padding:24px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;box-shadow:0 4px 18px rgba(16,24,40,0.06);overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#101828;">
+          <tr>
+            <td style="background:#1f2937;color:#fff;padding:20px 24px;">
+              <div style="font-size:18px;font-weight:700;">E‑Matrimonials</div>
+              <div style="opacity:.9;font-size:14px;margin-top:4px;">${subject}</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px;line-height:1.6;">
+              ${bodyHtml}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 24px;border-top:1px solid #eef2f7;color:#475467;font-size:12px;">
+              <div>You're receiving this email from E‑Matrimonials.</div>
+              <div style="margin-top:6px;">To stop receiving these, use the Unsubscribe link below.</div>
+              <div style="margin-top:10px;">
+                <a href="#" style="color:#1d4ed8;text-decoration:underline;">Unsubscribe</a>
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>`;
+  const text = `E-Matrimonials\n${subject}\n\n${bodyText}\n\nUnsubscribe available via your email provider's unsubscribe button.`;
   return { html, text };
+}
+
+export function brandWrapperBasic(subject: string, bodyHtml: string, bodyText: string) {
+  const html = `
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f7fb;padding:24px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;box-shadow:0 4px 18px rgba(16,24,40,0.06);overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#101828;">
+          <tr>
+            <td style="background:#1f2937;color:#fff;padding:16px 20px;font-weight:700;">E‑Matrimonials</td>
+          </tr>
+          <tr>
+            <td style="padding:22px 24px;line-height:1.6;">
+              <div style="font-size:16px;color:#111827;margin:0 0 6px;">${subject}</div>
+              ${bodyHtml}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>`;
+  const text = `E-Matrimonials\n${subject}\n\n${bodyText}`;
+  return { html, text };
+}
+
+export function tmplOtp(params: { otp: string }) {
+  const subject = 'Your OTP for E‑Matrimonial';
+  const bodyHtml = `
+    <p style="margin:0 0 12px;color:#475467;">Use this code to continue. It expires in 10 minutes.</p>
+    <div style="margin:16px 0 8px;">
+      <div style="display:inline-block;background:#111827;color:#ffffff;padding:12px 20px;border-radius:10px;font-size:24px;letter-spacing:4px;font-weight:700;">${params.otp}</div>
+    </div>
+    <p style="margin:12px 0 0;color:#667085;font-size:12px;">If you didn’t request this, you can safely ignore this email.</p>
+  `;
+  const bodyText = `Your OTP is: ${params.otp}\nIt is valid for 10 minutes.`;
+  return brandWrapperBasic(subject, bodyHtml, bodyText);
 }
 
 export function tmplDataEntrySubmitted(params: { email: string; content: string; lookingFor?: string }) {
