@@ -179,7 +179,8 @@ async function handlePaymentLinkPaid(payload: any) {
         to: post.email, 
         subject: '[E‑Matrimonials] Your ad is now live!', 
         text, 
-        html 
+        html,
+        disableUnsubscribe: true
       });
     } catch (emailError) {
       console.error('Error sending confirmation email:', emailError);
