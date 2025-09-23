@@ -150,4 +150,31 @@ If you have any questions, please contact our support team.`;
   return brandWrapper(subject, bodyHtml, bodyText);
 }
 
+export function tmplNewMessageToPoster(params: {
+  toEmail: string;
+  fromEmail: string;
+  contentPreview: string;
+  lookingFor: string;
+  message: string;
+}) {
+  const subject = `[${params.lookingFor} - "${params.contentPreview}"] New message from ${params.fromEmail}`;
+  const safePreview = params.contentPreview.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const safeMessage = params.message.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const bodyHtml = `
+    <p>Hello ${params.toEmail},</p>
+    <p>You received a new message for your "${params.lookingFor}" post:</p>
+    <div style="background:#f9fafb;border:1px solid #eef2f7;border-radius:8px;padding:12px 14px;margin:10px 0 14px;">
+      <div style="color:#475467;font-size:12px;margin-bottom:6px;">Post Preview</div>
+      <div style="color:#101828;font-weight:600;">"${safePreview}"</div>
+    </div>
+    <div style="background:#f9fafb;border:1px solid #eef2f7;border-radius:8px;padding:12px 14px;margin:0 0 14px;">
+      <div style="color:#475467;font-size:12px;margin-bottom:6px;">Message</div>
+      <div style="white-space:pre-wrap;color:#101828;">${safeMessage}</div>
+    </div>
+    <p style="margin-top:12px;color:#475467;">Reply directly to this email to respond.</p>
+  `;
+  const bodyText = `You received a new message for your "${params.lookingFor}" post\n\nPost Preview: "${params.contentPreview}"\n\n${params.message}\n\nReply directly to this email to respond.`;
+  return brandWrapper(subject, bodyHtml, bodyText);
+}
+
 

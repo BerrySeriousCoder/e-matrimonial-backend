@@ -12,6 +12,7 @@ import {
   incrementDailyCount 
 } from '../utils/emailValidation';
 import { trackEmailEvent } from '../middleware/analytics';
+import { tmplNewMessageToPoster } from '../utils/emailTemplates';
 
 const router = express.Router();
 
@@ -57,21 +58,15 @@ router.post('/send', sanitizeInput, validate(schemas.sendEmail), async (req, res
     const contentPreview = post[0].content.substring(0, 40).replace(/\s+/g, ' ').trim() + '...';
     const lookingFor = (post[0].lookingFor || 'unknown').charAt(0).toUpperCase() + (post[0].lookingFor || 'unknown').slice(1);
 
-    // Send email with enhanced subject and content
-    await sendEmail({
-      to: post[0].email,
-      subject: `[${lookingFor} - "${contentPreview}"] New message from ${email}`,
-      text: `You received a new message for your "${lookingFor}" post:
-
-Post Preview: "${contentPreview}"
-
-${message}
-
----
-Post Type: ${lookingFor}
-Reply directly to this email to respond.`,
-      replyTo: email
+    // Send templated email
+    const { html, text } = tmplNewMessageToPoster({
+      toEmail: post[0].email,
+      fromEmail: email,
+      contentPreview,
+      lookingFor,
+      message,
     });
+    await sendEmail({ to: post[0].email, subject: `[${lookingFor} - "${contentPreview}"] New message from ${email}`, text, html, replyTo: email });
 
     // Record the email sent
     await recordEmailSent(email, postId);
@@ -125,21 +120,15 @@ router.post('/send-authenticated', userAuth, sanitizeInput, validate(schemas.sen
     const contentPreview = post[0].content.substring(0, 40).replace(/\s+/g, ' ').trim() + '...';
     const lookingFor = (post[0].lookingFor || 'unknown').charAt(0).toUpperCase() + (post[0].lookingFor || 'unknown').slice(1);
 
-    // Send email with enhanced subject and content
-    await sendEmail({
-      to: post[0].email,
-      subject: `[${lookingFor} - "${contentPreview}"] New message from ${userEmail}`,
-      text: `You received a new message for your "${lookingFor}" post:
-
-Post Preview: "${contentPreview}"
-
-${message}
-
----
-Post Type: ${lookingFor}
-Reply directly to this email to respond.`,
-      replyTo: userEmail
+    // Send templated email
+    const tpl = tmplNewMessageToPoster({
+      toEmail: post[0].email,
+      fromEmail: userEmail,
+      contentPreview,
+      lookingFor,
+      message,
     });
+    await sendEmail({ to: post[0].email, subject: `[${lookingFor} - "${contentPreview}"] New message from ${userEmail}`, text: tpl.text, html: tpl.html, replyTo: userEmail });
 
     // Record the email and increment daily count
     await recordEmailSent(userEmail, postId, userId);
