@@ -36,36 +36,35 @@ export function trackDataEntryPerformance(employeeId: string, action: 'create' |
     try {
       const today = new Date().toISOString().split('T')[0];
       
-      // Get existing stats for today
-      const existingStats = await AnalyticsService.getDataEntryStats(employeeId, 1);
-      const todayStats = existingStats.find(stat => stat.date.startsWith(today));
-      
-      // Update stats based on action
-      const stats = {
+      // Record DELTA rows per action to avoid double-counting when summing
+      const deltaStats = {
         employeeId,
         date: today,
-        postsCreated: todayStats?.postsCreated || 0,
-        postsApproved: todayStats?.postsApproved || 0,
-        postsRejected: todayStats?.postsRejected || 0,
-        postsEdited: todayStats?.postsEdited || 0,
-        totalCharacters: todayStats?.totalCharacters || 0
+        postsCreated: 0,
+        postsApproved: 0,
+        postsRejected: 0,
+        postsEdited: 0,
+        totalCharacters: 0
       };
 
       if (action === 'create') {
-        stats.postsCreated++;
+        deltaStats.postsCreated = 1;
         if (metadata?.characterCount) {
-          stats.totalCharacters += metadata.characterCount;
+          deltaStats.totalCharacters = metadata.characterCount;
         }
       } else if (action === 'approve') {
-        stats.postsApproved++;
+        deltaStats.postsApproved = 1;
       } else if (action === 'reject') {
-        stats.postsRejected++;
+        deltaStats.postsRejected = 1;
       } else if (action === 'edit') {
-        stats.postsEdited++;
+        deltaStats.postsEdited = 1;
+        if (metadata?.characterCount) {
+          deltaStats.totalCharacters = metadata.characterCount;
+        }
       }
 
-      // Track the updated stats
-      await AnalyticsService.trackDataEntryStats(stats);
+      // Insert the delta row
+      await AnalyticsService.trackDataEntryStats(deltaStats);
       
       next();
     } catch (error) {
