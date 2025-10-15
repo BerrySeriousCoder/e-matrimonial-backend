@@ -12,7 +12,8 @@ const router = express.Router();
 // Validation schemas
 const paymentSchemas = {
   calculatePayment: Joi.object({
-    content: Joi.string().min(10).max(1000).required(),
+    // Allow empty/short content so frontend can render base price summary before 10 chars
+    content: Joi.string().max(1000).allow('').required(),
     fontSize: Joi.string().valid('default', 'large').required(),
     duration: Joi.number().valid(14, 21, 28).required(),
     couponCode: Joi.string().optional().allow(''),

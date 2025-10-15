@@ -56,16 +56,27 @@ app.use('/api/webhook', webhookRouter);
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-// Rate limiters
-const { 
-  generalLimiter, 
-  authLimiter, 
-  otpLimiter, 
+// Rate limiters (temporarily disabled for production testing)
+const {
+  generalLimiter,
+  authLimiter,
+  otpLimiter,
   postLimiter,
   adminAuthLimiter,
   adminLimiter,
   superAdminLimiter
 } = createRateLimiters();
+
+// Toggle to disable all rate limits in one place (set to false to re-enable)
+const DISABLE_RATE_LIMIT = true;
+const passThrough = (_req: any, _res: any, next: any) => next();
+
+const GL = DISABLE_RATE_LIMIT ? passThrough : generalLimiter;
+const AL = DISABLE_RATE_LIMIT ? passThrough : authLimiter;
+const OL = DISABLE_RATE_LIMIT ? passThrough : otpLimiter;
+const PL = DISABLE_RATE_LIMIT ? passThrough : postLimiter;
+const ADM = DISABLE_RATE_LIMIT ? passThrough : adminLimiter;
+const SAL = DISABLE_RATE_LIMIT ? passThrough : superAdminLimiter;
 
 // Root route to check if backend is running
 app.get('/', (req, res) => {
@@ -82,30 +93,30 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Apply rate limiting to routes
-app.use('/api/posts', generalLimiter, postsRouter);
-app.use('/api/otp', otpLimiter, otpRouter);
-app.use('/api/email', generalLimiter, emailRouter);
-app.use('/api/ui-texts', generalLimiter, uiTextsRouter);
-app.use('/api/user', authLimiter, userRouter);
+// Apply rate limiting to routes (may be no-ops when disabled)
+app.use('/api/posts', GL, postsRouter);
+app.use('/api/otp', OL, otpRouter);
+app.use('/api/email', GL, emailRouter);
+app.use('/api/ui-texts', GL, uiTextsRouter);
+app.use('/api/user', AL, userRouter);
 
 // Admin routes with separate rate limiters
-app.use('/api/admin', adminLimiter, adminRouter);
-app.use('/api/admin/management', superAdminLimiter, adminManagementRouter);
-app.use('/api/data-entry', adminLimiter, dataEntryRouter);
+app.use('/api/admin', ADM, adminRouter);
+app.use('/api/admin/management', SAL, adminManagementRouter);
+app.use('/api/data-entry', ADM, dataEntryRouter);
 
 // Search filters routes
-app.use('/api/search-filters', generalLimiter, searchFiltersRouter);
+app.use('/api/search-filters', GL, searchFiltersRouter);
 
 // Payment routes
-app.use('/api/payment', generalLimiter, paymentRouter);
-app.use('/api/admin/payment', adminLimiter, adminPaymentRouter);
+app.use('/api/payment', GL, paymentRouter);
+app.use('/api/admin/payment', ADM, adminPaymentRouter);
 
 // Analytics routes
-app.use('/api/analytics', adminLimiter, analyticsRouter);
+app.use('/api/analytics', ADM, analyticsRouter);
 
 // Apply specific rate limiting to post creation
-app.use('/api/posts', postLimiter);
+app.use('/api/posts', PL);
 
 // Error handling middleware (must be last)
 app.use(notFoundHandler);

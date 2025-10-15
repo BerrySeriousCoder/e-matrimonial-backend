@@ -58,11 +58,14 @@ export async function calculatePaymentAmount(
 ): Promise<PaymentCalculation> {
   const config = await getPaymentConfig();
   
-  const characterCount = content.length;
+  // Gracefully handle empty or short content for base summary rendering
+  const characterCount = Math.max(0, (content || '').length);
   const additionalCharacters = Math.max(0, characterCount - 200);
   const additionalCost = Math.ceil(additionalCharacters / 20) * config.additionalPricePer20Chars;
   
-  const baseAmount = config.basePriceFirst200 + additionalCost;
+  // Base amount should reflect ONLY the first 200 characters price.
+  // Additional characters are shown separately and added when computing subtotal.
+  const baseAmount = config.basePriceFirst200;
   
   // Font multiplier
   const fontMultiplier = fontSize === 'large' ? config.largeFontMultiplier : 1.0;
@@ -79,7 +82,9 @@ export async function calculatePaymentAmount(
     visibilityMultiplier = 1.0; // Default fallback
   }
   
-  const subtotal = Math.round(baseAmount * fontMultiplier * visibilityMultiplier);
+  // Subtotal is computed on (base + additional) before applying multipliers
+  const subtotalBeforeMultipliers = baseAmount + additionalCost;
+  const subtotal = Math.round(subtotalBeforeMultipliers * fontMultiplier * visibilityMultiplier);
   
   // Apply coupon discount if provided
   let discountAmount = 0;
