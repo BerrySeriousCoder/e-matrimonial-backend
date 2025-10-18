@@ -7,6 +7,7 @@ export interface PaymentCalculation {
   characterCount: number;
   additionalCharacters: number;
   additionalCost: number;
+  iconCost: number;
   fontMultiplier: number;
   visibilityMultiplier: number;
   subtotal: number;
@@ -54,7 +55,8 @@ export async function calculatePaymentAmount(
   content: string,
   fontSize: 'default' | 'large',
   duration: 14 | 21 | 28, // 2, 3, 4 weeks
-  couponCode?: string
+  couponCode?: string,
+  icon?: string
 ): Promise<PaymentCalculation> {
   const config = await getPaymentConfig();
   
@@ -82,8 +84,11 @@ export async function calculatePaymentAmount(
     visibilityMultiplier = 1.0; // Default fallback
   }
   
-  // Subtotal is computed on (base + additional) before applying multipliers
-  const subtotalBeforeMultipliers = baseAmount + additionalCost;
+  // Icon cost (100 rupees if icon is selected)
+  const iconCost = icon ? 100 : 0;
+  
+  // Subtotal is computed on (base + additional + icon) before applying multipliers
+  const subtotalBeforeMultipliers = baseAmount + additionalCost + iconCost;
   const subtotal = Math.round(subtotalBeforeMultipliers * fontMultiplier * visibilityMultiplier);
   
   // Apply coupon discount if provided
@@ -117,6 +122,7 @@ export async function calculatePaymentAmount(
     characterCount,
     additionalCharacters,
     additionalCost,
+    iconCost,
     fontMultiplier,
     visibilityMultiplier,
     subtotal,

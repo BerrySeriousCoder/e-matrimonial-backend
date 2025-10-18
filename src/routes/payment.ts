@@ -16,6 +16,7 @@ const paymentSchemas = {
     content: Joi.string().max(1000).allow('').required(),
     fontSize: Joi.string().valid('default', 'large').required(),
     duration: Joi.number().valid(14, 21, 28).required(),
+    icon: Joi.string().valid('businessman', 'doctor', 'itprofessional', 'lawyer', 'soldier', 'teacher').optional().allow(null),
     couponCode: Joi.string().optional().allow(''),
   }),
   createPaymentLink: Joi.object({
@@ -40,19 +41,21 @@ const paymentSchemas = {
     content: Joi.string().min(10).max(1000).required(),
     fontSize: Joi.string().valid('default', 'large').required(),
     duration: Joi.number().valid(14, 21, 28).required(),
+    icon: Joi.string().valid('businessman', 'doctor', 'itprofessional', 'lawyer', 'soldier', 'teacher').optional().allow(null),
   }),
 };
 
 // POST /api/payment/calculate - Calculate payment amount
 router.post('/calculate', sanitizeInput, validate(paymentSchemas.calculatePayment), async (req, res) => {
   try {
-    const { content, fontSize, duration, couponCode } = req.body;
+    const { content, fontSize, duration, icon, couponCode } = req.body;
     
     const calculation = await calculatePaymentAmount(
       content,
       fontSize,
       duration,
-      couponCode || undefined
+      couponCode || undefined,
+      icon || undefined
     );
 
     res.json({
@@ -73,13 +76,14 @@ router.post('/calculate', sanitizeInput, validate(paymentSchemas.calculatePaymen
 // POST /api/payment/apply-coupon - Validate and apply coupon code
 router.post('/apply-coupon', sanitizeInput, validate(paymentSchemas.applyCoupon), async (req, res) => {
   try {
-    const { couponCode, content, fontSize, duration } = req.body;
+    const { couponCode, content, fontSize, duration, icon } = req.body;
     
     const calculation = await calculatePaymentAmount(
       content,
       fontSize,
       duration,
-      couponCode
+      couponCode,
+      icon || undefined
     );
 
     if (!calculation.couponValid) {
@@ -128,7 +132,8 @@ router.post('/create-link', sanitizeInput, validate(paymentSchemas.createPayment
       post.content,
       post.fontSize as 'default' | 'large',
       post.expiresAt ? Math.ceil((new Date(post.expiresAt).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) as 14 | 21 | 28 : 14,
-      post.couponCode || undefined
+      post.couponCode || undefined,
+      post.icon || undefined
     );
 
     // Create payment transaction record

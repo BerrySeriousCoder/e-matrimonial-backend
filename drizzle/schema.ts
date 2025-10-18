@@ -80,6 +80,7 @@ export const posts = pgTable("posts", {
 	expiresAt: timestamp("expires_at", { mode: 'string' }),
 	fontSize: fontSize("font_size").default('default'),
 	bgColor: varchar("bg_color", { length: 50 }),
+	icon: varchar("icon", { length: 50 }),
 	status: status().default('pending'),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
 	createdByAdminId: integer("created_by_admin_id"),

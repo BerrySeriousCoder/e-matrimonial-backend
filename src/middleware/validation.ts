@@ -10,6 +10,16 @@ const ALLOWED_BG_COLORS = [
   '#ffcce6'  // Soft Pink
 ];
 
+// Allowed icon values
+const ALLOWED_ICONS = [
+  'businessman',
+  'doctor', 
+  'itprofessional',
+  'lawyer',
+  'soldier',
+  'teacher'
+];
+
 // Validation schemas
 export const schemas = {
   // User registration
@@ -52,6 +62,7 @@ export const schemas = {
     duration: Joi.number().integer().valid(14, 21, 28).required(), // 2, 3, 4 weeks
     fontSize: Joi.string().valid('default', 'large').default('default'), // Removed 'medium'
     bgColor: Joi.string().valid(...ALLOWED_BG_COLORS).default('#ffffff'),
+    icon: Joi.string().valid(...ALLOWED_ICONS).optional().allow(null),
     couponCode: Joi.string().optional().allow('')
   }),
 
@@ -76,6 +87,7 @@ export const schemas = {
     duration: Joi.number().integer().valid(14, 21, 28).required(), // 2, 3, 4 weeks
     fontSize: Joi.string().valid('default', 'large').default('default'), // Removed 'medium'
     bgColor: Joi.string().valid(...ALLOWED_BG_COLORS).default('#ffffff'),
+    icon: Joi.string().valid(...ALLOWED_ICONS).optional().allow(null),
     couponCode: Joi.string().optional().allow('')
   }),
 
@@ -174,6 +186,7 @@ export const schemas = {
     duration: Joi.number().integer().valid(14, 21, 28).required(), // 2, 3, 4 weeks
     fontSize: Joi.string().valid('default', 'large').default('default'), // Removed 'medium'
     bgColor: Joi.string().valid(...ALLOWED_BG_COLORS).default('#ffffff'),
+    icon: Joi.string().valid(...ALLOWED_ICONS).optional().allow(null),
     couponCode: Joi.string().optional().allow('')
   }),
 
@@ -183,13 +196,14 @@ export const schemas = {
     lookingFor: Joi.string().valid('bride', 'groom').optional(),
     duration: Joi.number().integer().valid(14, 21, 28).optional(), // 2, 3, 4 weeks
     fontSize: Joi.string().valid('default', 'large').optional(), // Removed 'medium'
-    bgColor: Joi.string().valid(...ALLOWED_BG_COLORS).optional()
+    bgColor: Joi.string().valid(...ALLOWED_BG_COLORS).optional(),
+    icon: Joi.string().valid(...ALLOWED_ICONS).optional().allow(null)
   }),
 
 };
 
-// Export allowed colors for use in other parts of the application
-export { ALLOWED_BG_COLORS };
+// Export allowed colors and icons for use in other parts of the application
+export { ALLOWED_BG_COLORS, ALLOWED_ICONS };
 
 // Validation middleware factory
 export const validate = (schema: Joi.ObjectSchema) => {

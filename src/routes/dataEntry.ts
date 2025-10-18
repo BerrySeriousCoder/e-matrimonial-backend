@@ -43,7 +43,7 @@ router.get('/posts', requireRole(['data_entry']), validateQuery(schemas.adminPos
 // POST /api/data-entry/posts - create a new post on behalf of customer
 router.post('/posts', requireRole(['data_entry']), sanitizeInput, validate(schemas.createAdminPost), async (req: AdminRequest, res) => {
   try {
-    const { email, content, lookingFor, duration, fontSize, bgColor } = req.body as any;
+    const { email, content, lookingFor, duration, fontSize, bgColor, icon, couponCode } = req.body as any;
 
     // Ensure user exists (same as admin create)
     let userId;
@@ -65,6 +65,8 @@ router.post('/posts', requireRole(['data_entry']), sanitizeInput, validate(schem
       lookingFor,
       fontSize: fontSize || 'default',
       bgColor: bgColor || null,
+      icon: icon || null,
+      couponCode: couponCode || null,
       status: 'pending',
       createdByAdminId: req.admin!.adminId,
     }).returning();

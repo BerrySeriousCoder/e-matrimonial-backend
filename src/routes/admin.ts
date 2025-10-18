@@ -177,7 +177,8 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
           currentPost.content,
           currentPost.fontSize as 'default' | 'large',
           currentPost.duration as 14 | 21 | 28,
-          currentPost.couponCode || undefined
+          currentPost.couponCode || undefined,
+          currentPost.icon || undefined
         );
 
         // Create payment link
@@ -303,14 +304,16 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
 });
 
 // Create Post (Admin - No OTP required)
-router.post('/posts', requireAdminAuth, async (req: AdminRequest, res) => {
+router.post('/posts', requireAdminAuth, sanitizeInput, validate(schemas.createAdminPost), async (req: AdminRequest, res) => {
   const {
     email,
     content,
     lookingFor,
     duration,
     fontSize,
-    bgColor
+    bgColor,
+    icon,
+    couponCode
   } = req.body;
 
   if (!email || !content) {
@@ -354,6 +357,8 @@ router.post('/posts', requireAdminAuth, async (req: AdminRequest, res) => {
         expiresAt: expiresAtString,
         fontSize: fontSize || 'default',
         bgColor: bgColor || null,
+        icon: icon || null,
+        couponCode: couponCode || null,
         status: 'published' // Admin created posts are published directly
       })
       .returning();

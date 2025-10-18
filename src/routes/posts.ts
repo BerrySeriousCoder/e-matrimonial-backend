@@ -155,6 +155,7 @@ router.post('/', sanitizeInput, validate(schemas.createPost), async (req, res) =
     duration, 
     fontSize, 
     bgColor,
+    icon,
     couponCode
   } = req.body;
 
@@ -202,6 +203,7 @@ router.post('/', sanitizeInput, validate(schemas.createPost), async (req, res) =
     lookingFor,
     fontSize,
     bgColor,
+    icon: icon || null,
     couponCode: couponCode || null,
     status: 'pending'
   }).returning();
@@ -228,7 +230,7 @@ router.post('/', sanitizeInput, validate(schemas.createPost), async (req, res) =
 
 // POST /api/posts/authenticated - create post for authenticated users (no OTP required)
 router.post('/authenticated', userAuth, sanitizeInput, validate(schemas.createAuthenticatedPost), async (req: any, res) => {
-  const { content, lookingFor, duration, fontSize, bgColor, couponCode } = req.body;
+  const { content, lookingFor, duration, fontSize, bgColor, icon, couponCode } = req.body;
   const userEmail = req.user.email; // From JWT token
 
   // Create post (expiresAt will be set when admin approves)
@@ -238,6 +240,7 @@ router.post('/authenticated', userAuth, sanitizeInput, validate(schemas.createAu
     lookingFor,
     fontSize,
     bgColor,
+    icon: icon || null,
     couponCode: couponCode || null,
     status: 'pending'
   }).returning();
