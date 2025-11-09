@@ -128,10 +128,12 @@ router.post('/create-link', sanitizeInput, validate(paymentSchemas.createPayment
     }
 
     // Calculate payment amount
+    // Use saved duration or default to 14 days (for posts created before duration was saved)
+    const duration = (post.duration as 14 | 21 | 28) || 14;
     const calculation = await calculatePaymentAmount(
       post.content,
       post.fontSize as 'default' | 'large',
-      post.expiresAt ? Math.ceil((new Date(post.expiresAt).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) as 14 | 21 | 28 : 14,
+      duration,
       post.couponCode || undefined,
       post.icon || undefined
     );

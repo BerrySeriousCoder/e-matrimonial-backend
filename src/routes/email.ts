@@ -66,9 +66,32 @@ router.post('/send', sanitizeInput, validate(schemas.sendEmail), async (req, res
       lookingFor,
       message,
     });
-    await sendEmail({ to: post[0].email, subject: `[${lookingFor} - "${contentPreview}"] New message from ${email}`, text, html, replyTo: email });
 
-    // Record the email sent
+    // Attempt to send email with detailed error handling
+    try {
+      await sendEmail({ 
+        to: post[0].email, 
+        subject: `[${lookingFor} - "${contentPreview}"] New message from ${email}`, 
+        text, 
+        html, 
+        replyTo: email 
+      });
+      console.log(`Email successfully sent to ${post[0].email} from ${email} for post ${postId}`);
+    } catch (emailError: any) {
+      // Log detailed error before re-throwing
+      console.error('Failed to send email via SendGrid:', {
+        error: emailError?.message,
+        code: emailError?.code,
+        statusCode: emailError?.response?.statusCode,
+        to: post[0].email,
+        from: email,
+        postId,
+        sendGridError: emailError?.response?.body
+      });
+      throw emailError; // Re-throw to be caught by outer catch
+    }
+
+    // Record the email sent (only if sendEmail succeeded)
     await recordEmailSent(email, postId);
 
     // Track email analytics
@@ -82,8 +105,14 @@ router.post('/send', sanitizeInput, validate(schemas.sendEmail), async (req, res
       message: 'Email sent successfully'
     });
 
-  } catch (error) {
-    console.error('Error sending email:', error);
+  } catch (error: any) {
+    console.error('Error in /api/email/send route:', {
+      message: error?.message,
+      code: error?.code,
+      stack: error?.stack,
+      response: error?.response?.body,
+      statusCode: error?.response?.statusCode
+    });
     res.status(500).json({
       success: false,
       message: 'Failed to send email'
@@ -128,9 +157,33 @@ router.post('/send-authenticated', userAuth, sanitizeInput, validate(schemas.sen
       lookingFor,
       message,
     });
-    await sendEmail({ to: post[0].email, subject: `[${lookingFor} - "${contentPreview}"] New message from ${userEmail}`, text: tpl.text, html: tpl.html, replyTo: userEmail });
 
-    // Record the email and increment daily count
+    // Attempt to send email with detailed error handling
+    try {
+      await sendEmail({ 
+        to: post[0].email, 
+        subject: `[${lookingFor} - "${contentPreview}"] New message from ${userEmail}`, 
+        text: tpl.text, 
+        html: tpl.html, 
+        replyTo: userEmail 
+      });
+      console.log(`Authenticated email successfully sent to ${post[0].email} from ${userEmail} for post ${postId}`);
+    } catch (emailError: any) {
+      // Log detailed error before re-throwing
+      console.error('Failed to send authenticated email via SendGrid:', {
+        error: emailError?.message,
+        code: emailError?.code,
+        statusCode: emailError?.response?.statusCode,
+        to: post[0].email,
+        from: userEmail,
+        postId,
+        userId,
+        sendGridError: emailError?.response?.body
+      });
+      throw emailError; // Re-throw to be caught by outer catch
+    }
+
+    // Record the email and increment daily count (only if sendEmail succeeded)
     await recordEmailSent(userEmail, postId, userId);
     await incrementDailyCount(userId);
 
@@ -142,8 +195,14 @@ router.post('/send-authenticated', userAuth, sanitizeInput, validate(schemas.sen
       message: 'Email sent successfully'
     });
 
-  } catch (error) {
-    console.error('Error sending authenticated email:', error);
+  } catch (error: any) {
+    console.error('Error in /api/email/send-authenticated route:', {
+      message: error?.message,
+      code: error?.code,
+      stack: error?.stack,
+      response: error?.response?.body,
+      statusCode: error?.response?.statusCode
+    });
     res.status(500).json({
       success: false,
       message: 'Failed to send email'

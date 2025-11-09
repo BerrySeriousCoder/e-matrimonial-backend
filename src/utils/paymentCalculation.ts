@@ -10,6 +10,7 @@ export interface PaymentCalculation {
   iconCost: number;
   fontMultiplier: number;
   visibilityMultiplier: number;
+  subtotalBeforeMultipliers: number;
   subtotal: number;
   discountAmount: number;
   finalAmount: number;
@@ -125,6 +126,7 @@ export async function calculatePaymentAmount(
     iconCost,
     fontMultiplier,
     visibilityMultiplier,
+    subtotalBeforeMultipliers,
     subtotal,
     discountAmount,
     finalAmount,

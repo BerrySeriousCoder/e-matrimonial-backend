@@ -173,10 +173,12 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
     } else if (status === 'payment_pending') {
       // Calculate payment amount and create payment link
       try {
+        // Use saved duration or default to 14 days (for posts created before duration was saved)
+        const duration = (currentPost.duration as 14 | 21 | 28) || 14;
         const paymentCalculation = await calculatePaymentAmount(
           currentPost.content,
           currentPost.fontSize as 'default' | 'large',
-          currentPost.duration as 14 | 21 | 28,
+          duration,
           currentPost.couponCode || undefined,
           currentPost.icon || undefined
         );

@@ -11,6 +11,7 @@
     "seed:admin": "ts-node src/db/adminSeed.ts",
     "seed:ui-texts": "ts-node src/db/uiTextsSeed.ts",
     "seed:filters": "ts-node src/db/filterTestSeed.ts",
+    "db:reset-expiry": "ts-node src/db/resetExpiry.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push"

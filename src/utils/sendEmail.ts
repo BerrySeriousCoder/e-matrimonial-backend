@@ -48,5 +48,61 @@ export async function sendEmail({
       msg.headers = { ...(msg.headers || {}), ...headers };
     }
   }
-  await sgMail.send(msg);
+
+  // Validate environment variables
+  if (!process.env.SENDGRID_API_KEY) {
+    const error = new Error('SENDGRID_API_KEY is not configured');
+    console.error('SendGrid configuration error:', error.message);
+    throw error;
+  }
+  if (!process.env.SENDGRID_FROM_EMAIL && !from) {
+    const error = new Error('SENDGRID_FROM_EMAIL is not configured and no from address provided');
+    console.error('SendGrid configuration error:', error.message);
+    throw error;
+  }
+
+  try {
+    console.log('Attempting to send email via SendGrid:', {
+      to,
+      from: msg.from,
+      subject,
+      hasHtml: !!html,
+      hasText: !!text,
+      replyTo: msg.replyTo
+    });
+
+    const result = await sgMail.send(msg);
+    console.log('SendGrid email sent successfully:', {
+      to,
+      subject,
+      statusCode: result[0]?.statusCode,
+      headers: result[0]?.headers
+    });
+    return result;
+  } catch (error: any) {
+    // Log detailed SendGrid error information
+    console.error('SendGrid send error:', {
+      message: error?.message,
+      code: error?.code,
+      statusCode: error?.response?.statusCode,
+      body: error?.response?.body,
+      headers: error?.response?.headers,
+      emailDetails: {
+        to,
+        from: msg.from,
+        subject,
+        replyTo: msg.replyTo
+      }
+    });
+
+    // If SendGrid provides error details, include them
+    if (error?.response?.body) {
+      const errorDetails = typeof error.response.body === 'string' 
+        ? error.response.body 
+        : JSON.stringify(error.response.body);
+      console.error('SendGrid error details:', errorDetails);
+    }
+
+    throw error;
+  }
 } 

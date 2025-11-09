@@ -201,6 +201,7 @@ router.post('/', sanitizeInput, validate(schemas.createPost), async (req, res) =
     email,
     content,
     lookingFor,
+    duration: duration || 14, // Save duration for payment calculation
     fontSize,
     bgColor,
     icon: icon || null,
@@ -238,6 +239,7 @@ router.post('/authenticated', userAuth, sanitizeInput, validate(schemas.createAu
     email: userEmail,
     content,
     lookingFor,
+    duration: duration || 14, // Save duration for payment calculation
     fontSize,
     bgColor,
     icon: icon || null,
