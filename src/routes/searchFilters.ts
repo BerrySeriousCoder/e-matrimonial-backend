@@ -19,8 +19,22 @@ const reorderSections = async (targetId: number, newOrder: number) => {
 
   const oldOrder = targetSection.order;
   
-  // If moving to the same position, no need to reorder
-  if (oldOrder === newOrder) return;
+  // If moving to the same position, just normalize to fix any existing duplicates
+  if (oldOrder === newOrder) {
+    const allAfter = await db
+      .select()
+      .from(searchFilterSections)
+      .orderBy(asc(searchFilterSections.order), asc(searchFilterSections.id));
+    for (let i = 0; i < allAfter.length; i++) {
+      if (allAfter[i].order !== i + 1) {
+        await db
+          .update(searchFilterSections)
+          .set({ order: i + 1, updatedAt: new Date().toISOString() })
+          .where(eq(searchFilterSections.id, allAfter[i].id));
+      }
+    }
+    return;
+  }
 
   if (newOrder > oldOrder) {
     // Moving down: shift items between oldOrder+1 and newOrder up by 1
@@ -46,6 +60,26 @@ const reorderSections = async (targetId: number, newOrder: number) => {
         gte(searchFilterSections.order, newOrder),
         lte(searchFilterSections.order, oldOrder - 1)
       ));
+  }
+
+  // Set the target section's order to the new order
+  await db
+    .update(searchFilterSections)
+    .set({ order: newOrder, updatedAt: new Date().toISOString() })
+    .where(eq(searchFilterSections.id, targetId));
+
+  // --- Robust normalization: re-sequence all orders ---
+  const allAfter = await db
+    .select()
+    .from(searchFilterSections)
+    .orderBy(asc(searchFilterSections.order), asc(searchFilterSections.id));
+  for (let i = 0; i < allAfter.length; i++) {
+    if (allAfter[i].order !== i + 1) {
+      await db
+        .update(searchFilterSections)
+        .set({ order: i + 1, updatedAt: new Date().toISOString() })
+        .where(eq(searchFilterSections.id, allAfter[i].id));
+    }
   }
 };
 
@@ -162,6 +196,40 @@ router.get('/', async (req, res) => {
 // GET /api/search-filters/admin - Get all sections and options (including inactive) for admin
 router.get('/admin', requireSuperadminAuth, async (req, res) => {
   try {
+    // First, normalize section orders to fix any duplicates
+    const sectionsToNormalize = await db
+      .select()
+      .from(searchFilterSections)
+      .orderBy(asc(searchFilterSections.order), asc(searchFilterSections.id));
+    
+    for (let i = 0; i < sectionsToNormalize.length; i++) {
+      if (sectionsToNormalize[i].order !== i + 1) {
+        await db
+          .update(searchFilterSections)
+          .set({ order: i + 1, updatedAt: new Date().toISOString() })
+          .where(eq(searchFilterSections.id, sectionsToNormalize[i].id));
+      }
+    }
+
+    // Normalize option orders within each section
+    for (const section of sectionsToNormalize) {
+      const optionsToNormalize = await db
+        .select()
+        .from(searchFilterOptions)
+        .where(eq(searchFilterOptions.sectionId, section.id))
+        .orderBy(asc(searchFilterOptions.order), asc(searchFilterOptions.id));
+      
+      for (let i = 0; i < optionsToNormalize.length; i++) {
+        if (optionsToNormalize[i].order !== i + 1) {
+          await db
+            .update(searchFilterOptions)
+            .set({ order: i + 1, updatedAt: new Date().toISOString() })
+            .where(eq(searchFilterOptions.id, optionsToNormalize[i].id));
+        }
+      }
+    }
+
+    // Now fetch the normalized data
     const sections = await db
       .select()
       .from(searchFilterSections)
@@ -204,23 +272,36 @@ router.post('/sections', requireSuperadminAuth, sanitizeInput, validate(schemas.
       });
     }
 
-    // If order is specified and greater than 1, shift existing items
-    if (order && order > 1) {
-      await db
-        .update(searchFilterSections)
-        .set({ 
-          order: sql`${searchFilterSections.order} + 1`,
-          updatedAt: new Date().toISOString()
-        })
-        .where(gte(searchFilterSections.order, order));
-    }
+    // Shift existing items at and after the target order position
+    const targetOrder = order || 1;
+    await db
+      .update(searchFilterSections)
+      .set({ 
+        order: sql`${searchFilterSections.order} + 1`,
+        updatedAt: new Date().toISOString()
+      })
+      .where(gte(searchFilterSections.order, targetOrder));
     
     const result = await db.insert(searchFilterSections).values({
       name,
       displayName,
       description,
-      order: order || 1,
+      order: targetOrder,
     }).returning();
+
+    // Normalize all orders to ensure no gaps or duplicates
+    const allSections = await db
+      .select()
+      .from(searchFilterSections)
+      .orderBy(asc(searchFilterSections.order), asc(searchFilterSections.id));
+    for (let i = 0; i < allSections.length; i++) {
+      if (allSections[i].order !== i + 1) {
+        await db
+          .update(searchFilterSections)
+          .set({ order: i + 1, updatedAt: new Date().toISOString() })
+          .where(eq(searchFilterSections.id, allSections[i].id));
+      }
+    }
 
     res.json({ 
       success: true,
@@ -274,23 +355,32 @@ router.put('/sections/:id', requireSuperadminAuth, sanitizeInput, validate(schem
 
     const oldOrder = existingSection[0].order;
     
-    // First, reorder if the order has changed
-    if (oldOrder !== order) {
-      await reorderSections(parseInt(id), order);
-    }
-    
-    const result = await db
+    // Update basic fields first (excluding order)
+    await db
       .update(searchFilterSections)
       .set({
         name,
         displayName,
         description,
-        order,
         isActive,
         updatedAt: new Date().toISOString(),
       })
+      .where(eq(searchFilterSections.id, parseInt(id)));
+    
+    // Then handle reordering if the order has changed
+    if (oldOrder !== order) {
+      await reorderSections(parseInt(id), order);
+    } else {
+      // Even if order didn't change, normalize to fix any existing duplicates
+      await reorderSections(parseInt(id), order);
+    }
+    
+    // Fetch the updated section
+    const result = await db
+      .select()
+      .from(searchFilterSections)
       .where(eq(searchFilterSections.id, parseInt(id)))
-      .returning();
+      .limit(1);
 
     res.json({ 
       success: true,
@@ -326,6 +416,20 @@ router.delete('/sections/:id', requireSuperadminAuth, async (req, res) => {
 
     // Delete section (cascade will handle options and tags)
     await db.delete(searchFilterSections).where(eq(searchFilterSections.id, parseInt(id)));
+
+    // Normalize orders after deletion to remove gaps
+    const allSections = await db
+      .select()
+      .from(searchFilterSections)
+      .orderBy(asc(searchFilterSections.order), asc(searchFilterSections.id));
+    for (let i = 0; i < allSections.length; i++) {
+      if (allSections[i].order !== i + 1) {
+        await db
+          .update(searchFilterSections)
+          .set({ order: i + 1, updatedAt: new Date().toISOString() })
+          .where(eq(searchFilterSections.id, allSections[i].id));
+      }
+    }
 
     res.json({ 
       success: true,
@@ -376,26 +480,40 @@ router.post('/options', requireSuperadminAuth, sanitizeInput, validate(schemas.c
       });
     }
 
-    // If order is specified and greater than 1, shift existing items in this section
-    if (order && order > 1) {
-      await db
-        .update(searchFilterOptions)
-        .set({ 
-          order: sql`${searchFilterOptions.order} + 1`,
-          updatedAt: new Date().toISOString()
-        })
-        .where(and(
-          eq(searchFilterOptions.sectionId, sectionId),
-          gte(searchFilterOptions.order, order)
-        ));
-    }
+    // Shift existing items at and after the target order position
+    const targetOrder = order || 1;
+    await db
+      .update(searchFilterOptions)
+      .set({ 
+        order: sql`${searchFilterOptions.order} + 1`,
+        updatedAt: new Date().toISOString()
+      })
+      .where(and(
+        eq(searchFilterOptions.sectionId, sectionId),
+        gte(searchFilterOptions.order, targetOrder)
+      ));
     
     const result = await db.insert(searchFilterOptions).values({
       sectionId,
       value,
       displayName,
-      order: order || 1,
+      order: targetOrder,
     }).returning();
+
+    // Normalize all orders in this section to ensure no gaps or duplicates
+    const allOptions = await db
+      .select()
+      .from(searchFilterOptions)
+      .where(eq(searchFilterOptions.sectionId, sectionId))
+      .orderBy(asc(searchFilterOptions.order), asc(searchFilterOptions.id));
+    for (let i = 0; i < allOptions.length; i++) {
+      if (allOptions[i].order !== i + 1) {
+        await db
+          .update(searchFilterOptions)
+          .set({ order: i + 1, updatedAt: new Date().toISOString() })
+          .where(eq(searchFilterOptions.id, allOptions[i].id));
+      }
+    }
 
     res.json({ 
       success: true,
@@ -542,8 +660,25 @@ router.delete('/options/:id', requireSuperadminAuth, async (req, res) => {
       });
     }
 
+    const sectionId = existingOption[0].sectionId;
+    
     // Delete option (cascade will handle tags)
     await db.delete(searchFilterOptions).where(eq(searchFilterOptions.id, parseInt(id)));
+
+    // Normalize orders in the section after deletion to remove gaps
+    const allOptions = await db
+      .select()
+      .from(searchFilterOptions)
+      .where(eq(searchFilterOptions.sectionId, sectionId))
+      .orderBy(asc(searchFilterOptions.order), asc(searchFilterOptions.id));
+    for (let i = 0; i < allOptions.length; i++) {
+      if (allOptions[i].order !== i + 1) {
+        await db
+          .update(searchFilterOptions)
+          .set({ order: i + 1, updatedAt: new Date().toISOString() })
+          .where(eq(searchFilterOptions.id, allOptions[i].id));
+      }
+    }
 
     res.json({ 
       success: true,
