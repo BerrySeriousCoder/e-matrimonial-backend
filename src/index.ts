@@ -9,6 +9,7 @@ import userRouter from './routes/user';
 import adminRouter from './routes/admin';
 import adminManagementRouter from './routes/adminManagement';
 import searchFiltersRouter from './routes/searchFilters';
+import synonymsRouter from './routes/synonyms';
 import dataEntryRouter from './routes/dataEntry';
 import paymentRouter from './routes/payment';
 import adminPaymentRouter from './routes/adminPayment';
@@ -107,6 +108,9 @@ app.use('/api/data-entry', ADM, dataEntryRouter);
 
 // Search filters routes
 app.use('/api/search-filters', GL, searchFiltersRouter);
+
+// Synonyms routes (for semantic search)
+app.use('/api/synonyms', GL, synonymsRouter);
 
 // Payment routes
 app.use('/api/payment', GL, paymentRouter);

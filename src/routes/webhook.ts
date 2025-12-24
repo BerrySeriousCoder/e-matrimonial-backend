@@ -24,10 +24,12 @@ router.get('/test', (req, res) => {
 
 // Razorpay webhook handler
 router.post('/razorpay', async (req, res) => {
+  console.log('🔔 Razorpay webhook received');
   try {
     const signature = req.headers['x-razorpay-signature'] as string;
     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
     
+    console.log('Webhook signature present:', !!signature);
     
     if (!webhookSecret) {
       console.error('RAZORPAY_WEBHOOK_SECRET not configured');
@@ -84,6 +86,7 @@ router.post('/razorpay', async (req, res) => {
 });
 
 async function handlePaymentLinkPaid(payload: any) {
+  console.log('💰 Processing payment_link.paid event');
   try {
     // Extract data from nested entity structure
     const payment_link = payload.payment_link?.entity;
@@ -91,12 +94,16 @@ async function handlePaymentLinkPaid(payload: any) {
 
     // Find the post by payment link reference_id (format: post_123)
     const referenceId = payment_link?.reference_id;
+    console.log('Payment reference_id:', referenceId);
+    
     if (!referenceId || !referenceId.startsWith('post_')) {
       console.error('Invalid reference_id:', referenceId);
       return;
     }
 
     const postId = parseInt(referenceId.replace('post_', ''));
+    console.log('Processing payment for post ID:', postId);
+    
     const [post] = await db.select()
       .from(posts)
       .where(eq(posts.id, postId));
@@ -105,6 +112,8 @@ async function handlePaymentLinkPaid(payload: any) {
       console.error('Post not found for ID:', postId);
       return;
     }
+    
+    console.log('Found post, email:', post.email);
 
     // Create payment transaction record
     // Convert amount from paise to rupees (Razorpay sends amount in paise)
@@ -169,11 +178,14 @@ async function handlePaymentLinkPaid(payload: any) {
       console.error('Error tracking payment success analytics:', analyticsError);
     }
 
-    // Send confirmation email
+    // Send confirmation email with View Ad link
     try {
+      console.log('📧 Sending "ad is live" email to:', post.email);
       const { html, text } = tmplPublished({ 
         email: post.email, 
-        expiresAt: new Date(expiresAtString)
+        expiresAt: new Date(expiresAtString),
+        postId: postId,
+        content: post.content
       });
       await sendEmail({ 
         to: post.email, 
@@ -182,8 +194,9 @@ async function handlePaymentLinkPaid(payload: any) {
         html,
         disableUnsubscribe: true
       });
+      console.log('✅ "Ad is live" email sent successfully to:', post.email);
     } catch (emailError) {
-      console.error('Error sending confirmation email:', emailError);
+      console.error('❌ Error sending confirmation email:', emailError);
     }
 
   } catch (error) {

@@ -1,5 +1,6 @@
 import Joi from 'joi';
 import { Request, Response, NextFunction } from 'express';
+import { sanitizeHtml, getTextLength } from '../utils/htmlUtils';
 
 // Allowed background colors - only 5 blue and pink shades
 const ALLOWED_BG_COLORS = [
@@ -13,7 +14,7 @@ const ALLOWED_BG_COLORS = [
 // Allowed icon values
 const ALLOWED_ICONS = [
   'businessman',
-  'doctor', 
+  'doctor',
   'itprofessional',
   'lawyer',
   'soldier',
@@ -56,7 +57,13 @@ export const schemas = {
   // Post creation - Updated for payment system
   createPost: Joi.object({
     email: Joi.string().email().required().max(255),
-    content: Joi.string().min(10).max(1000).required(),
+    content: Joi.string().min(10).max(5000).required().custom((value, helpers) => {
+      const textLength = getTextLength(value);
+      if (textLength < 10 || textLength > 1000) {
+        return helpers.error('string.textLength', { textLength });
+      }
+      return value;
+    }, 'HTML content validation'),
     otp: Joi.string().length(6).pattern(/^\d{6}$/).required(),
     lookingFor: Joi.string().valid('bride', 'groom').required(),
     duration: Joi.number().integer().valid(14, 21, 28).required(), // 2, 3, 4 weeks
@@ -64,31 +71,41 @@ export const schemas = {
     bgColor: Joi.string().valid(...ALLOWED_BG_COLORS).default('#ffffff'),
     icon: Joi.string().valid(...ALLOWED_ICONS).optional().allow(null),
     couponCode: Joi.string().optional().allow('')
+  }).messages({
+    'string.textLength': 'Content text length must be between 10 and 1000 characters (currently {{#textLength}})'
   }),
 
   // Email sending (anonymous users)
   sendEmail: Joi.object({
     email: Joi.string().email().required().max(255),
-    message: Joi.string().min(1).max(1000).required(),
+    message: Joi.string().min(1).max(5000).required(),
     postId: Joi.number().integer().positive().required(),
     otp: Joi.string().length(6).pattern(/^\d{6}$/).required()
   }),
 
   // Authenticated email sending (logged-in users)
   sendAuthenticatedEmail: Joi.object({
-    message: Joi.string().min(1).max(1000).required(),
+    message: Joi.string().min(1).max(5000).required(),
     postId: Joi.number().integer().positive().required()
   }),
 
   // Authenticated post creation (logged-in users) with restricted colors
   createAuthenticatedPost: Joi.object({
-    content: Joi.string().min(10).max(1000).required(),
+    content: Joi.string().min(10).max(5000).required().custom((value, helpers) => {
+      const textLength = getTextLength(value);
+      if (textLength < 10 || textLength > 1000) {
+        return helpers.error('string.textLength', { textLength });
+      }
+      return value;
+    }, 'HTML content validation'),
     lookingFor: Joi.string().valid('bride', 'groom').required(),
     duration: Joi.number().integer().valid(14, 21, 28).required(), // 2, 3, 4 weeks
     fontSize: Joi.string().valid('default', 'large').default('default'), // Removed 'medium'
     bgColor: Joi.string().valid(...ALLOWED_BG_COLORS).default('#ffffff'),
     icon: Joi.string().valid(...ALLOWED_ICONS).optional().allow(null),
     couponCode: Joi.string().optional().allow('')
+  }).messages({
+    'string.textLength': 'Content text length must be between 10 and 1000 characters (currently {{#textLength}})'
   }),
 
   // Admin login
@@ -178,26 +195,60 @@ export const schemas = {
     isActive: Joi.boolean().required()
   }),
 
+  // Search synonym group creation
+  createSynonymGroup: Joi.object({
+    name: Joi.string().max(100).required()
+  }),
+
+  // Search synonym group update
+  updateSynonymGroup: Joi.object({
+    name: Joi.string().max(100).required(),
+    isActive: Joi.boolean().required()
+  }),
+
+  // Search synonym word creation
+  createSynonymWord: Joi.object({
+    groupId: Joi.number().integer().positive().required(),
+    word: Joi.string().max(100).required()
+  }),
+
   // Admin post creation with restricted colors - Updated for payment system
   createAdminPost: Joi.object({
     email: Joi.string().email().required().max(255),
-    content: Joi.string().min(10).max(1000).required(),
+    content: Joi.string().min(10).max(5000).required().custom((value, helpers) => {
+      const textLength = getTextLength(value);
+      if (textLength < 10 || textLength > 1000) {
+        return helpers.error('string.textLength', { textLength });
+      }
+      return value;
+    }, 'HTML content validation'),
     lookingFor: Joi.string().valid('bride', 'groom').required(),
     duration: Joi.number().integer().valid(14, 21, 28).required(), // 2, 3, 4 weeks
     fontSize: Joi.string().valid('default', 'large').default('default'), // Removed 'medium'
     bgColor: Joi.string().valid(...ALLOWED_BG_COLORS).default('#ffffff'),
     icon: Joi.string().valid(...ALLOWED_ICONS).optional().allow(null),
     couponCode: Joi.string().optional().allow('')
+  }).messages({
+    'string.textLength': 'Content text length must be between 10 and 1000 characters (currently {{#textLength}})'
   }),
 
   // Admin post update with restricted colors
   updateAdminPost: Joi.object({
-    content: Joi.string().min(10).max(1000).optional(),
+    content: Joi.string().min(10).max(5000).optional().custom((value, helpers) => {
+      if (!value) return value;
+      const textLength = getTextLength(value);
+      if (textLength < 10 || textLength > 1000) {
+        return helpers.error('string.textLength', { textLength });
+      }
+      return value;
+    }, 'HTML content validation'),
     lookingFor: Joi.string().valid('bride', 'groom').optional(),
     duration: Joi.number().integer().valid(14, 21, 28).optional(), // 2, 3, 4 weeks
     fontSize: Joi.string().valid('default', 'large').optional(), // Removed 'medium'
     bgColor: Joi.string().valid(...ALLOWED_BG_COLORS).optional(),
     icon: Joi.string().valid(...ALLOWED_ICONS).optional().allow(null)
+  }).messages({
+    'string.textLength': 'Content text length must be between 10 and 1000 characters (currently {{#textLength}})'
   }),
 
 };
@@ -209,7 +260,7 @@ export { ALLOWED_BG_COLORS, ALLOWED_ICONS };
 export const validate = (schema: Joi.ObjectSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
     const { error, value } = schema.validate(req.body);
-    
+
     if (error) {
       return res.status(400).json({
         success: false,
@@ -228,7 +279,7 @@ export const validate = (schema: Joi.ObjectSchema) => {
 export const validateQuery = (schema: Joi.ObjectSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
     const { error, value } = schema.validate(req.query);
-    
+
     if (error) {
       return res.status(400).json({
         success: false,
@@ -246,8 +297,13 @@ export const validateQuery = (schema: Joi.ObjectSchema) => {
 
 // Sanitization middleware
 export const sanitizeInput = (req: Request, res: Response, next: NextFunction) => {
-  // Sanitize string inputs
-  const sanitizeString = (str: string): string => {
+  // Sanitize string inputs - allow safe HTML for content fields
+  const sanitizeString = (str: string, fieldName?: string): string => {
+    // Allow HTML for content and message fields
+    if (fieldName === 'content' || fieldName === 'message') {
+      return sanitizeHtml(str.trim());
+    }
+    // Strip HTML for other fields
     return str
       .trim()
       .replace(/[<>]/g, '') // Remove potential HTML tags
@@ -256,23 +312,23 @@ export const sanitizeInput = (req: Request, res: Response, next: NextFunction) =
   };
 
   // Recursively sanitize object
-  const sanitizeObject = (obj: any): any => {
+  const sanitizeObject = (obj: any, parentKey?: string): any => {
     if (typeof obj === 'string') {
-      return sanitizeString(obj);
+      return sanitizeString(obj, parentKey);
     }
-    
+
     if (Array.isArray(obj)) {
-      return obj.map(sanitizeObject);
+      return obj.map((item) => sanitizeObject(item, parentKey));
     }
-    
+
     if (obj && typeof obj === 'object') {
       const sanitized: any = {};
       for (const [key, value] of Object.entries(obj)) {
-        sanitized[key] = sanitizeObject(value);
+        sanitized[key] = sanitizeObject(value, key);
       }
       return sanitized;
     }
-    
+
     return obj;
   };
 

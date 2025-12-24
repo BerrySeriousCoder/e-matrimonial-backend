@@ -20,6 +20,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@google-cloud/vision": "^5.3.4",
     "@sendgrid/mail": "^8.1.5",
     "@types/express-rate-limit": "^6.0.2",
     "bcryptjs": "^3.0.2",
@@ -30,8 +31,10 @@
     "express-rate-limit": "^8.0.1",
     "express-validator": "^7.2.1",
     "helmet": "^8.1.0",
+    "isomorphic-dompurify": "^2.33.0",
     "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
     "pg": "^8.16.3",
     "postgres": "^3.4.7",
     "razorpay": "^2.9.6"
@@ -40,6 +43,7 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.0.0",
     "@types/node": "^24.1.0",
     "@types/pg": "^8.15.4",
     "drizzle-kit": "^0.31.4",

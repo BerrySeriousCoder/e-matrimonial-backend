@@ -8,10 +8,10 @@ import { requireAdminAuth, requireSuperadminAuth, AdminRequest, isSuperadmin } f
 import { logAdminAction } from '../utils/adminLogger';
 import { validate, sanitizeInput, validateQuery, schemas } from '../middleware/validation';
 import { sendEmail } from '../utils/sendEmail';
-import { tmplPublished } from '../utils/emailTemplates';
+import { tmplPublished, tmplPaymentRequired, tmplPostArchived, tmplPostDeleted } from '../utils/emailTemplates';
+import { stripHtml } from '../utils/htmlUtils';
 import { calculatePaymentAmount } from '../utils/paymentCalculation';
 import RazorpayService from '../utils/razorpayService';
-import { tmplPaymentRequired } from '../utils/emailTemplates';
 import { createRateLimiters } from '../middleware/security';
 import { trackAnalytics, trackDataEntryPerformance } from '../middleware/analytics';
 
@@ -70,7 +70,7 @@ router.post('/login', adminAuthLimiter, sanitizeInput, validate(schemas.adminLog
 router.get('/profile', requireAdminAuth, async (req: AdminRequest, res) => {
   try {
     const [admin] = await db.select().from(admins).where(eq(admins.id, req.admin!.adminId));
-    
+
     if (!admin) {
       return res.status(404).json({ success: false, message: 'Admin not found' });
     }
@@ -80,12 +80,12 @@ router.get('/profile', requireAdminAuth, async (req: AdminRequest, res) => {
 
     res.json({
       success: true,
-      admin: { 
-        id: admin.id, 
-        email: admin.email, 
+      admin: {
+        id: admin.id,
+        email: admin.email,
         isSuperadmin: isSuperadminUser,
         role,
-        createdAt: admin.createdAt 
+        createdAt: admin.createdAt
       }
     });
 
@@ -110,7 +110,7 @@ router.get('/posts', requireAdminAuth, validateQuery(schemas.adminPostsQuery), a
 
     if (search) {
       whereConditions.push(
-        sql`(${posts.email} ILIKE ${`%${search}%`} OR ${posts.content} ILIKE ${`%${search}%`} OR ${posts.content} % ${search})`
+        sql`(${posts.email} ILIKE ${`%${search}%`} OR REGEXP_REPLACE(${posts.content}, '<[^>]*>', '', 'g') ILIKE ${`%${search}%`})`
       );
     }
 
@@ -141,7 +141,7 @@ router.get('/posts', requireAdminAuth, validateQuery(schemas.adminPostsQuery), a
 // Update Post Status
 router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res) => {
   const { id } = req.params;
-  let { status } = req.body;
+  let { status, reason } = req.body;
 
   if (!status || !['pending', 'published', 'archived', 'deleted', 'expired', 'edited', 'payment_pending'].includes(status)) {
     return res.status(400).json({ success: false, message: 'Valid status required' });
@@ -150,7 +150,7 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
   try {
     // Get current post data for logging
     const [currentPost] = await db.select().from(posts).where(eq(posts.id, Number(id)));
-    
+
     if (!currentPost) {
       return res.status(404).json({ success: false, message: 'Post not found' });
     }
@@ -163,7 +163,7 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
     // Update post status and handle payment flow
     let updateData: any = { status };
     let paymentLink = null;
-    
+
     if (status === 'published') {
       // For direct publishing (bypass payment), set expiresAt to current date + duration
       const expiresAt = new Date();
@@ -197,13 +197,13 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
         updateData.couponCode = currentPost.couponCode;
       } catch (error) {
         console.error('Payment calculation/link creation error:', error);
-        return res.status(500).json({ 
-          success: false, 
-          message: 'Failed to create payment link. Please try again.' 
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to create payment link. Please try again.'
         });
       }
     }
-    
+
     const [updatedPost] = await db.update(posts)
       .set(updateData)
       .where(eq(posts.id, Number(id)))
@@ -214,34 +214,34 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
       trackAnalytics('ad_approval', {
         postId: Number(id),
         adminId: req.admin!.adminId
-      })(req, res, () => {});
-      
+      })(req, res, () => { });
+
       // Track data entry performance if post was created by data entry employee
       if (currentPost.createdByAdminId) {
         trackDataEntryPerformance(currentPost.createdByAdminId.toString(), 'approve', {
           postId: Number(id)
-        })(req, res, () => {});
+        })(req, res, () => { });
       }
     } else if (status === 'archived' || status === 'deleted') {
       trackAnalytics('ad_rejection', {
         postId: Number(id),
         adminId: req.admin!.adminId,
         reason: status
-      })(req, res, () => {});
-      
+      })(req, res, () => { });
+
       // Track data entry performance if post was created by data entry employee
       if (currentPost.createdByAdminId) {
         trackDataEntryPerformance(currentPost.createdByAdminId.toString(), 'reject', {
           postId: Number(id),
           reason: status
-        })(req, res, () => {});
+        })(req, res, () => { });
       }
     }
 
     // Log the action
     let actionType = 'delete_post';
     let actionVerb = 'deleted';
-    
+
     if (status === 'published') {
       actionType = 'approve_post';
       actionVerb = 'approved';
@@ -252,41 +252,70 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
       actionType = 'archive_post';
       actionVerb = 'archived';
     }
-    
+
     await logAdminAction(req, {
       action: actionType,
       entityType: 'post',
       entityId: Number(id),
       oldData: { status: currentPost.status },
-      newData: { status, paymentLink: paymentLink?.short_url },
-      details: `Admin ${req.admin!.email} ${actionVerb} post ${id}`,
+      newData: { status, paymentLink: paymentLink?.short_url, reason },
+      details: `Admin ${req.admin!.email} ${actionVerb} post ${id}${reason ? ` - Reason: ${reason}` : ''}`,
     });
 
     // Send appropriate email based on status
     try {
+      // Create content preview for notification emails
+      const contentPreview = stripHtml(currentPost.content).substring(0, 50).replace(/\s+/g, ' ').trim() + '...';
+
       if (status === 'published') {
-        const { html, text } = tmplPublished({ 
-          email: currentPost.email, 
-          expiresAt: updateData.expiresAt 
+        const { html, text } = tmplPublished({
+          email: currentPost.email,
+          expiresAt: updateData.expiresAt
         });
-        sendEmail({ 
-          to: currentPost.email, 
-          subject: '[E‑Matrimonials] Your ad is published', 
-          text, 
-          html 
+        sendEmail({
+          to: currentPost.email,
+          subject: '[E‑Matrimonials] Your ad is published',
+          text,
+          html,
+          disableUnsubscribe: true
         });
       } else if (status === 'payment_pending' && paymentLink) {
-        const { html, text } = tmplPaymentRequired({ 
+        const { html, text } = tmplPaymentRequired({
           email: currentPost.email,
           paymentLink: paymentLink.short_url,
           amount: updateData.finalAmount,
           postId: currentPost.id
         });
-        sendEmail({ 
-          to: currentPost.email, 
-          subject: '[E‑Matrimonials] Payment required to publish your ad', 
-          text, 
-          html 
+        sendEmail({
+          to: currentPost.email,
+          subject: '[E‑Matrimonials] Your matrimonial ad has been approved, kindly proceed for payment',
+          text,
+          html,
+          disableUnsubscribe: true
+        });
+      } else if (status === 'archived') {
+        const { html, text } = tmplPostArchived({
+          email: currentPost.email,
+          contentPreview,
+          reason: reason || undefined
+        });
+        sendEmail({
+          to: currentPost.email,
+          subject: '[E‑Matrimonials] Your ad has been archived',
+          text,
+          html
+        });
+      } else if (status === 'deleted') {
+        const { html, text } = tmplPostDeleted({
+          email: currentPost.email,
+          contentPreview,
+          reason: reason || undefined
+        });
+        sendEmail({
+          to: currentPost.email,
+          subject: '[E‑Matrimonials] Your ad has been removed',
+          text,
+          html
         });
       }
     } catch (e) {
@@ -475,12 +504,12 @@ router.get('/logs', requireSuperadminAuth, async (req: AdminRequest, res) => {
           email: admins.email
         }
       })
-      .from(adminLogs)
-      .leftJoin(admins, eq(adminLogs.adminId, admins.id))
-      .where(whereClause)
-      .orderBy(desc(adminLogs.createdAt))
-      .limit(limit)
-      .offset(offset),
+        .from(adminLogs)
+        .leftJoin(admins, eq(adminLogs.adminId, admins.id))
+        .where(whereClause)
+        .orderBy(desc(adminLogs.createdAt))
+        .limit(limit)
+        .offset(offset),
       db.select({ count: sql<number>`count(*)` }).from(adminLogs).where(whereClause)
     ]);
 

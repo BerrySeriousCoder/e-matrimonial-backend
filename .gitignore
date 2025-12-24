@@ -8,6 +8,10 @@ yarn-error.log*
 # Environment variables
 .env
 .env.local
+
+# Google Cloud credentials (NEVER commit this!)
+googlecredential.json
+*-credentials.json
 .env.development.local
 .env.test.local
 .env.production.local

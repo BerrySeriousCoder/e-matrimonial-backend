@@ -2,6 +2,15 @@ import sgMail from '@sendgrid/mail';
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY!);
 
+// SendGrid attachment format
+export interface EmailAttachment {
+  content: string; // Base64 encoded content
+  filename: string;
+  type: string; // MIME type
+  disposition?: 'attachment' | 'inline';
+  contentId?: string; // For inline images
+}
+
 export async function sendEmail({
   to,
   from,
@@ -11,6 +20,7 @@ export async function sendEmail({
   replyTo,
   unsubscribeUrl,
   disableUnsubscribe,
+  attachments,
 }: {
   to: string;
   from?: string;
@@ -20,6 +30,7 @@ export async function sendEmail({
   replyTo?: string;
   unsubscribeUrl?: string;
   disableUnsubscribe?: boolean;
+  attachments?: EmailAttachment[];
 }) {
   const msg: any = {
     to,
@@ -35,6 +46,15 @@ export async function sendEmail({
     },
   };
   if (replyTo) msg.replyTo = replyTo;
+  if (attachments && attachments.length > 0) {
+    msg.attachments = attachments.map(att => ({
+      content: att.content,
+      filename: att.filename,
+      type: att.type,
+      disposition: att.disposition || 'attachment',
+      ...(att.contentId ? { content_id: att.contentId } : {}),
+    }));
+  }
   // Add List-Unsubscribe headers for native Gmail/Outlook UI
   // Prefer SendGrid-hosted unsubscribe (provided when Subscription Tracking is enabled)
   // If caller provides a fallback unsubscribeUrl, include it as well.
@@ -68,7 +88,8 @@ export async function sendEmail({
       subject,
       hasHtml: !!html,
       hasText: !!text,
-      replyTo: msg.replyTo
+      replyTo: msg.replyTo,
+      attachmentCount: attachments?.length || 0,
     });
 
     const result = await sgMail.send(msg);

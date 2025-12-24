@@ -8,6 +8,7 @@ import { sanitizeInput, validate, validateQuery, schemas } from '../middleware/v
 import bcrypt from 'bcryptjs';
 import { sendEmail } from '../utils/sendEmail';
 import { tmplDataEntrySubmitted } from '../utils/emailTemplates';
+import { getTextLength } from '../utils/htmlUtils';
 import { trackDataEntryPerformance } from '../middleware/analytics';
 
 const router = express.Router();
@@ -21,7 +22,7 @@ router.get('/posts', requireRole(['data_entry']), validateQuery(schemas.adminPos
 
     const whereConditions: any[] = [eq(posts.createdByAdminId, req.admin!.adminId)];
     if (status && status !== 'all') whereConditions.push(eq(posts.status, status));
-    if (search) whereConditions.push(sql`(${posts.email} ILIKE ${`%${search}%`} OR ${posts.content} ILIKE ${`%${search}%`} OR ${posts.content} % ${search})`);
+    if (search) whereConditions.push(sql`(${posts.email} ILIKE ${`%${search}%`} OR REGEXP_REPLACE(${posts.content}, '<[^>]*>', '', 'g') ILIKE ${`%${search}%`})`);
 
     const whereClause = and(...whereConditions);
 
@@ -81,7 +82,7 @@ router.post('/posts', requireRole(['data_entry']), sanitizeInput, validate(schem
 
     // Track data entry performance
     trackDataEntryPerformance(req.admin!.adminId.toString(), 'create', {
-      characterCount: content.length,
+      characterCount: getTextLength(content),
       lookingFor,
       fontSize
     })(req, res, () => {
@@ -108,10 +109,10 @@ router.put('/posts/:id', requireRole(['data_entry']), sanitizeInput, validate(sc
     delete updateData.duration; // duration is used only by admin approval/create
 
     const [updated] = await db.update(posts).set(updateData).where(eq(posts.id, Number(id))).returning();
-    
+
     // Track data entry performance
     trackDataEntryPerformance(req.admin!.adminId.toString(), 'edit', {
-      characterCount: updateData.content?.length || 0,
+      characterCount: updateData.content ? getTextLength(updateData.content) : 0,
       postId: Number(id)
     })(req, res, () => {
       res.json({ success: true, message: 'Post updated and pending re-approval', post: updated });

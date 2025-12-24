@@ -210,3 +210,29 @@ export const paymentTransactions = pgTable("payment_transactions", {
 	index("idx_payment_transactions_razorpay_payment_link_id").using("btree", table.razorpayPaymentLinkId.asc().nullsLast().op("text_ops")),
 	index("idx_payment_transactions_status").using("btree", table.status.asc().nullsLast().op("text_ops")),
 ]);
+
+// Search Synonym Dictionary Tables
+export const searchSynonymGroups = pgTable("search_synonym_groups", {
+	id: serial().primaryKey().notNull(),
+	name: varchar({ length: 100 }).notNull(),
+	isActive: boolean("is_active").default(true).notNull(),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	unique("search_synonym_groups_name_unique").on(table.name),
+]);
+
+export const searchSynonymWords = pgTable("search_synonym_words", {
+	id: serial().primaryKey().notNull(),
+	groupId: integer("group_id").notNull(),
+	word: varchar({ length: 100 }).notNull(),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	foreignKey({
+		columns: [table.groupId],
+		foreignColumns: [searchSynonymGroups.id],
+		name: "search_synonym_words_group_id_search_synonym_groups_id_fk"
+	}).onDelete("cascade"),
+	unique("search_synonym_words_word_unique").on(table.word),
+	index("idx_search_synonym_words_word").using("btree", table.word.asc().nullsLast().op("text_ops")),
+]);

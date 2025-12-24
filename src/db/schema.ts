@@ -47,10 +47,10 @@ export const adminLogs = pgTable("admin_logs", {
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
 	foreignKey({
-			columns: [table.adminId],
-			foreignColumns: [admins.id],
-			name: "admin_logs_admin_id_admins_id_fk"
-		}),
+		columns: [table.adminId],
+		foreignColumns: [admins.id],
+		name: "admin_logs_admin_id_admins_id_fk"
+	}),
 ]);
 
 export const users = pgTable("users", {
@@ -75,7 +75,7 @@ export const admins = pgTable("admins", {
 export const posts = pgTable("posts", {
 	id: serial().primaryKey().notNull(),
 	email: varchar({ length: 255 }).notNull(),
-	content: varchar({ length: 1000 }).notNull(),
+	content: text().notNull(),
 	userId: integer("user_id"),
 	lookingFor: lookingFor("looking_for"),
 	duration: integer().default(14),
@@ -92,15 +92,15 @@ export const posts = pgTable("posts", {
 	couponCode: varchar("coupon_code", { length: 50 }),
 }, (table) => [
 	foreignKey({
-			columns: [table.userId],
-			foreignColumns: [users.id],
-			name: "posts_user_id_users_id_fk"
-		}),
+		columns: [table.userId],
+		foreignColumns: [users.id],
+		name: "posts_user_id_users_id_fk"
+	}),
 	foreignKey({
-			columns: [table.paymentTransactionId],
-			foreignColumns: [paymentTransactions.id],
-			name: "posts_payment_transaction_id_fkey"
-		}),
+		columns: [table.paymentTransactionId],
+		foreignColumns: [paymentTransactions.id],
+		name: "posts_payment_transaction_id_fkey"
+	}),
 ]);
 
 export const postEmails = pgTable("post_emails", {
@@ -111,15 +111,15 @@ export const postEmails = pgTable("post_emails", {
 	sentAt: timestamp("sent_at", { mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
 	foreignKey({
-			columns: [table.userId],
-			foreignColumns: [users.id],
-			name: "post_emails_user_id_users_id_fk"
-		}),
+		columns: [table.userId],
+		foreignColumns: [users.id],
+		name: "post_emails_user_id_users_id_fk"
+	}),
 	foreignKey({
-			columns: [table.postId],
-			foreignColumns: [posts.id],
-			name: "post_emails_post_id_posts_id_fk"
-		}),
+		columns: [table.postId],
+		foreignColumns: [posts.id],
+		name: "post_emails_post_id_posts_id_fk"
+	}),
 ]);
 
 export const searchFilterSections = pgTable("search_filter_sections", {
@@ -146,10 +146,10 @@ export const searchFilterOptions = pgTable("search_filter_options", {
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
 	foreignKey({
-			columns: [table.sectionId],
-			foreignColumns: [searchFilterSections.id],
-			name: "search_filter_options_section_id_search_filter_sections_id_fk"
-		}).onDelete("cascade"),
+		columns: [table.sectionId],
+		foreignColumns: [searchFilterSections.id],
+		name: "search_filter_options_section_id_search_filter_sections_id_fk"
+	}).onDelete("cascade"),
 ]);
 
 export const userEmailLimits = pgTable("user_email_limits", {
@@ -159,17 +159,17 @@ export const userEmailLimits = pgTable("user_email_limits", {
 	lastResetDate: varchar("last_reset_date", { length: 10 }).notNull(),
 }, (table) => [
 	foreignKey({
-			columns: [table.userId],
-			foreignColumns: [users.id],
-			name: "user_email_limits_user_id_users_id_fk"
-		}),
+		columns: [table.userId],
+		foreignColumns: [users.id],
+		name: "user_email_limits_user_id_users_id_fk"
+	}),
 	unique("user_email_limits_user_id_unique").on(table.userId),
 ]);
 
 export const couponCodes = pgTable("coupon_codes", {
 	id: serial().primaryKey().notNull(),
 	code: varchar({ length: 50 }).notNull(),
-	discountPercentage: numeric("discount_percentage", { precision: 5, scale:  2 }).notNull(),
+	discountPercentage: numeric("discount_percentage", { precision: 5, scale: 2 }).notNull(),
 	isActive: boolean("is_active").default(true).notNull(),
 	usageLimit: integer("usage_limit"),
 	usedCount: integer("used_count").default(0).notNull(),
@@ -185,10 +185,10 @@ export const paymentConfigs = pgTable("payment_configs", {
 	id: serial().primaryKey().notNull(),
 	basePriceFirst200: integer("base_price_first_200").default(5000).notNull(),
 	additionalPricePer20Chars: integer("additional_price_per_20_chars").default(500).notNull(),
-	largeFontMultiplier: numeric("large_font_multiplier", { precision: 3, scale:  2 }).default('1.20').notNull(),
-	visibility2WeeksMultiplier: numeric("visibility_2_weeks_multiplier", { precision: 3, scale:  2 }).default('1.00').notNull(),
-	visibility3WeeksMultiplier: numeric("visibility_3_weeks_multiplier", { precision: 3, scale:  2 }).default('1.50').notNull(),
-	visibility4WeeksMultiplier: numeric("visibility_4_weeks_multiplier", { precision: 3, scale:  2 }).default('2.00').notNull(),
+	largeFontMultiplier: numeric("large_font_multiplier", { precision: 3, scale: 2 }).default('1.20').notNull(),
+	visibility2WeeksMultiplier: numeric("visibility_2_weeks_multiplier", { precision: 3, scale: 2 }).default('1.00').notNull(),
+	visibility3WeeksMultiplier: numeric("visibility_3_weeks_multiplier", { precision: 3, scale: 2 }).default('1.50').notNull(),
+	visibility4WeeksMultiplier: numeric("visibility_4_weeks_multiplier", { precision: 3, scale: 2 }).default('2.00').notNull(),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
 });
@@ -260,4 +260,30 @@ export const dailyAdminStats = pgTable("daily_admin_stats", {
 }, (table) => [
 	index("idx_daily_admin_stats_date").on(table.date),
 	unique("unique_daily_admin_stats_date").on(table.date),
+]);
+
+// Search Synonym Dictionary Tables
+export const searchSynonymGroups = pgTable("search_synonym_groups", {
+	id: serial().primaryKey().notNull(),
+	name: varchar({ length: 100 }).notNull(),
+	isActive: boolean("is_active").default(true).notNull(),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	unique("search_synonym_groups_name_unique").on(table.name),
+]);
+
+export const searchSynonymWords = pgTable("search_synonym_words", {
+	id: serial().primaryKey().notNull(),
+	groupId: integer("group_id").notNull(),
+	word: varchar({ length: 100 }).notNull(),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	foreignKey({
+		columns: [table.groupId],
+		foreignColumns: [searchSynonymGroups.id],
+		name: "search_synonym_words_group_id_search_synonym_groups_id_fk"
+	}).onDelete("cascade"),
+	unique("search_synonym_words_word_unique").on(table.word),
+	index("idx_search_synonym_words_word").using("btree", table.word.asc().nullsLast().op("text_ops")),
 ]);

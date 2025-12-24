@@ -13,10 +13,11 @@ const router = express.Router();
 const paymentSchemas = {
   calculatePayment: Joi.object({
     // Allow empty/short content so frontend can render base price summary before 10 chars
-    content: Joi.string().max(1000).allow('').required(),
+    content: Joi.string().max(5000).allow('').required(),
     fontSize: Joi.string().valid('default', 'large').required(),
     duration: Joi.number().valid(14, 21, 28).required(),
     icon: Joi.string().valid('businessman', 'doctor', 'itprofessional', 'lawyer', 'soldier', 'teacher').optional().allow(null),
+    bgColor: Joi.string().optional().allow(''),
     couponCode: Joi.string().optional().allow(''),
   }),
   createPaymentLink: Joi.object({
@@ -38,24 +39,26 @@ const paymentSchemas = {
   }),
   applyCoupon: Joi.object({
     couponCode: Joi.string().required(),
-    content: Joi.string().min(10).max(1000).required(),
+    content: Joi.string().min(10).max(5000).required(),
     fontSize: Joi.string().valid('default', 'large').required(),
     duration: Joi.number().valid(14, 21, 28).required(),
     icon: Joi.string().valid('businessman', 'doctor', 'itprofessional', 'lawyer', 'soldier', 'teacher').optional().allow(null),
+    bgColor: Joi.string().optional().allow(''),
   }),
 };
 
 // POST /api/payment/calculate - Calculate payment amount
 router.post('/calculate', sanitizeInput, validate(paymentSchemas.calculatePayment), async (req, res) => {
   try {
-    const { content, fontSize, duration, icon, couponCode } = req.body;
-    
+    const { content, fontSize, duration, icon, bgColor, couponCode } = req.body;
+
     const calculation = await calculatePaymentAmount(
       content,
       fontSize,
       duration,
       couponCode || undefined,
-      icon || undefined
+      icon || undefined,
+      bgColor || undefined
     );
 
     res.json({
@@ -76,14 +79,15 @@ router.post('/calculate', sanitizeInput, validate(paymentSchemas.calculatePaymen
 // POST /api/payment/apply-coupon - Validate and apply coupon code
 router.post('/apply-coupon', sanitizeInput, validate(paymentSchemas.applyCoupon), async (req, res) => {
   try {
-    const { couponCode, content, fontSize, duration, icon } = req.body;
-    
+    const { couponCode, content, fontSize, duration, icon, bgColor } = req.body;
+
     const calculation = await calculatePaymentAmount(
       content,
       fontSize,
       duration,
       couponCode,
-      icon || undefined
+      icon || undefined,
+      bgColor || undefined
     );
 
     if (!calculation.couponValid) {
@@ -112,18 +116,18 @@ router.post('/apply-coupon', sanitizeInput, validate(paymentSchemas.applyCoupon)
 router.post('/create-link', sanitizeInput, validate(paymentSchemas.createPaymentLink), async (req, res) => {
   try {
     const { postId } = req.body;
-    
+
     // Get post details
     const [post] = await db.select().from(posts).where(eq(posts.id, postId));
-    
+
     if (!post) {
       return res.status(404).json({ success: false, message: 'Post not found' });
     }
 
     if (post.status !== 'payment_pending') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Post is not in payment pending status' 
+      return res.status(400).json({
+        success: false,
+        message: 'Post is not in payment pending status'
       });
     }
 
@@ -135,7 +139,8 @@ router.post('/create-link', sanitizeInput, validate(paymentSchemas.createPayment
       post.fontSize as 'default' | 'large',
       duration,
       post.couponCode || undefined,
-      post.icon || undefined
+      post.icon || undefined,
+      post.bgColor || undefined
     );
 
     // Create payment transaction record
@@ -182,7 +187,7 @@ router.post('/create-link', sanitizeInput, validate(paymentSchemas.createPayment
 router.post('/verify', sanitizeInput, validate(paymentSchemas.verifyPayment), async (req, res) => {
   try {
     const { paymentLinkId, paymentId, paymentLinkReferenceId, paymentLinkStatus, signature } = req.body;
-    
+
     // Verify signature
     const isValidSignature = RazorpayService.verifyPaymentSignature(
       paymentLinkId,
@@ -268,7 +273,7 @@ router.post('/verify-callback', sanitizeInput, validate(paymentSchemas.verifyCal
 router.get('/status/:postId', async (req, res) => {
   try {
     const postId = parseInt(req.params.postId);
-    
+
     const [post] = await db.select()
       .from(posts)
       .where(eq(posts.id, postId));

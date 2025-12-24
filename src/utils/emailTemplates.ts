@@ -1,4 +1,11 @@
-export function brandWrapper(subject: string, bodyHtml: string, bodyText: string) {
+export function brandWrapper(subject: string, bodyHtml: string, bodyText: string, showUnsubscribe: boolean = true) {
+  const unsubscribeFooter = showUnsubscribe ? `
+          <tr>
+            <td style="padding:16px 24px;border-top:1px solid #eef2f7;color:#475467;font-size:12px;">
+              <div>You're receiving this email from E‑Matrimonials.</div>
+              <div style="margin-top:6px;">To stop receiving these, use the Unsubscribe link below.</div>
+            </td>
+          </tr>` : '';
   const html = `
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f7fb;padding:24px 0;">
     <tr>
@@ -15,17 +22,13 @@ export function brandWrapper(subject: string, bodyHtml: string, bodyText: string
               ${bodyHtml}
             </td>
           </tr>
-          <tr>
-            <td style="padding:16px 24px;border-top:1px solid #eef2f7;color:#475467;font-size:12px;">
-              <div>You're receiving this email from E‑Matrimonials.</div>
-              <div style="margin-top:6px;">To stop receiving these, use the Unsubscribe link below.</div>
-            </td>
-          </tr>
+          ${unsubscribeFooter}
         </table>
       </td>
     </tr>
   </table>`;
-  const text = `E-Matrimonials\n${subject}\n\n${bodyText}\n\nUnsubscribe available via your email provider's unsubscribe button.`;
+  const unsubscribeText = showUnsubscribe ? `\n\nUnsubscribe available via your email provider's unsubscribe button.` : '';
+  const text = `E-Matrimonials\n${subject}\n\n${bodyText}${unsubscribeText}`;
   return { html, text };
 }
 
@@ -53,13 +56,13 @@ export function brandWrapperBasic(subject: string, bodyHtml: string, bodyText: s
 }
 
 export function tmplOtp(params: { otp: string }) {
-  const subject = 'Your OTP for E‑Matrimonial';
+  const subject = `Your OTP is ${params.otp} - E‑Matrimonials`;
   const bodyHtml = `
     <p style="margin:0 0 12px;color:#475467;">Use this code to continue. It expires in 10 minutes.</p>
     <div style="margin:16px 0 8px;">
       <div style="display:inline-block;background:#111827;color:#ffffff;padding:12px 20px;border-radius:10px;font-size:24px;letter-spacing:4px;font-weight:700;">${params.otp}</div>
     </div>
-    <p style="margin:12px 0 0;color:#667085;font-size:12px;">If you didn’t request this, you can safely ignore this email.</p>
+    <p style="margin:12px 0 0;color:#667085;font-size:12px;">If you didn't request this, you can safely ignore this email.</p>
   `;
   const bodyText = `Your OTP is: ${params.otp}\nIt is valid for 10 minutes.`;
   return brandWrapperBasic(subject, bodyHtml, bodyText);
@@ -107,18 +110,45 @@ We will notify you once your ad is approved and published.`;
   return brandWrapper(subject, bodyHtml, bodyText);
 }
 
-export function tmplPublished(params: { email: string; expiresAt?: Date }) {
+export function tmplPublished(params: { email: string; expiresAt?: Date; postId?: number; content?: string }) {
   const subject = 'Your ad has been published';
+  const siteUrl = process.env.CLIENT_BASE_URL || process.env.FRONTEND_URL || 'https://e-matrimonials.com';
+  const viewAdUrl = params.postId ? `${siteUrl}/?highlight=${params.postId}` : siteUrl;
+  
+  // Strip HTML tags and truncate content for preview
+  const contentPreview = params.content 
+    ? params.content.replace(/<[^>]*>/g, '').slice(0, 200) + (params.content.length > 200 ? '…' : '')
+    : '';
+  const safePreview = contentPreview.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  
   const bodyHtml = `
     <p>Hello ${params.email},</p>
-    <p>Good news! Your matrimonial advertisement has been published.</p>
+    <p style="font-size:18px;color:#059669;font-weight:600;margin:16px 0;">🎉 Good news! Your matrimonial advertisement is now live!</p>
+    ${contentPreview ? `
+    <div style="background:#f9fafb;border:1px solid #eef2f7;border-radius:8px;padding:16px;margin:16px 0;">
+      <div style="color:#475467;font-size:12px;margin-bottom:8px;font-weight:600;">Your Ad Preview</div>
+      <div style="color:#101828;font-size:14px;line-height:1.6;">${safePreview}</div>
+    </div>
+    ` : ''}
     ${params.expiresAt ? `<p><strong>Expires on:</strong> ${params.expiresAt.toDateString()}</p>` : ''}
+    <div style="margin:24px 0;text-align:center;">
+      <a href="${viewAdUrl}" 
+         style="background-color:#1f2937;color:#ffffff;padding:14px 32px;text-decoration:none;border-radius:8px;display:inline-block;font-weight:600;font-size:16px;">
+        View Your Ad
+      </a>
+    </div>
+    <p style="color:#667085;font-size:13px;margin-top:16px;">Click the button above to see your ad live on E‑Matrimonials. You can share this link with family and friends!</p>
     <p>Thank you for using E‑Matrimonials.</p>
   `;
   const bodyText = `Hello ${params.email},
-Good news! Your matrimonial advertisement has been published.
-${params.expiresAt ? `Expires on: ${params.expiresAt.toDateString()}\n` : ''}Thank you for using E-Matrimonials.`;
-  return brandWrapper(subject, bodyHtml, bodyText);
+
+Good news! Your matrimonial advertisement is now live!
+${contentPreview ? `\nYour Ad Preview:\n${contentPreview}\n` : ''}
+${params.expiresAt ? `Expires on: ${params.expiresAt.toDateString()}\n` : ''}
+View your ad: ${viewAdUrl}
+
+Thank you for using E-Matrimonials.`;
+  return brandWrapper(subject, bodyHtml, bodyText, false);
 }
 
 export function tmplPaymentRequired(params: { email: string; paymentLink: string; amount: number; postId: number }) {
@@ -147,7 +177,7 @@ Post ID: ${params.postId}
 
 Once payment is completed, your ad will be automatically published and you'll receive a confirmation email.
 If you have any questions, please contact our support team.`;
-  return brandWrapper(subject, bodyHtml, bodyText);
+  return brandWrapper(subject, bodyHtml, bodyText, false);
 }
 
 export function tmplNewMessageToPoster(params: {
@@ -159,7 +189,9 @@ export function tmplNewMessageToPoster(params: {
 }) {
   const subject = `[${params.lookingFor} - "${params.contentPreview}"] New message from ${params.fromEmail}`;
   const safePreview = params.contentPreview.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const safeMessage = params.message.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Message comes from rich text editor and is already sanitized - render HTML
+  // Strip HTML tags for plain text version
+  const plainTextMessage = params.message.replace(/<[^>]*>/g, '').trim();
   const bodyHtml = `
     <p>Hello ${params.toEmail},</p>
     <p>You received a new message for your "${params.lookingFor}" post:</p>
@@ -169,12 +201,72 @@ export function tmplNewMessageToPoster(params: {
     </div>
     <div style="background:#f9fafb;border:1px solid #eef2f7;border-radius:8px;padding:12px 14px;margin:0 0 14px;">
       <div style="color:#475467;font-size:12px;margin-bottom:6px;">Message</div>
-      <div style="white-space:pre-wrap;color:#101828;">${safeMessage}</div>
+      <div style="color:#101828;">${params.message}</div>
     </div>
     <p style="margin-top:12px;color:#475467;">Reply directly to this email to respond.</p>
   `;
-  const bodyText = `You received a new message for your "${params.lookingFor}" post\n\nPost Preview: "${params.contentPreview}"\n\n${params.message}\n\nReply directly to this email to respond.`;
+  const bodyText = `You received a new message for your "${params.lookingFor}" post\n\nPost Preview: "${params.contentPreview}"\n\n${plainTextMessage}\n\nReply directly to this email to respond.`;
   return brandWrapper(subject, bodyHtml, bodyText);
 }
 
+export function tmplPostArchived(params: { email: string; contentPreview: string; reason?: string }) {
+  const subject = 'Your ad has been archived';
+  const safePreview = params.contentPreview.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const reasonHtml = params.reason
+    ? `
+    <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;margin:16px 0;">
+      <div style="color:#92400e;font-size:12px;font-weight:600;margin-bottom:6px;">Reason</div>
+      <div style="color:#78350f;">${params.reason.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+    </div>`
+    : '';
+  const bodyHtml = `
+    <p>Hello ${params.email},</p>
+    <p>Your matrimonial advertisement has been archived by our team.</p>
+    <div style="background:#f9fafb;border:1px solid #eef2f7;border-radius:8px;padding:12px 14px;margin:10px 0 14px;">
+      <div style="color:#475467;font-size:12px;margin-bottom:6px;">Ad Preview</div>
+      <div style="color:#101828;font-weight:600;">"${safePreview}"</div>
+    </div>
+    ${reasonHtml}
+    <p>If you believe this was done in error or have any questions, please contact our support team.</p>
+    <p>Thank you for using E‑Matrimonials.</p>
+  `;
+  const bodyText = `Hello ${params.email},
+Your matrimonial advertisement has been archived by our team.
 
+Ad Preview: "${params.contentPreview}"
+${params.reason ? `\nReason: ${params.reason}\n` : ''}
+If you believe this was done in error or have any questions, please contact our support team.
+Thank you for using E-Matrimonials.`;
+  return brandWrapper(subject, bodyHtml, bodyText);
+}
+
+export function tmplPostDeleted(params: { email: string; contentPreview: string; reason?: string }) {
+  const subject = 'Your ad has been removed';
+  const safePreview = params.contentPreview.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const reasonHtml = params.reason
+    ? `
+    <div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:12px 14px;margin:16px 0;">
+      <div style="color:#991b1b;font-size:12px;font-weight:600;margin-bottom:6px;">Reason</div>
+      <div style="color:#7f1d1d;">${params.reason.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+    </div>`
+    : '';
+  const bodyHtml = `
+    <p>Hello ${params.email},</p>
+    <p>Your matrimonial advertisement has been removed by our team.</p>
+    <div style="background:#f9fafb;border:1px solid #eef2f7;border-radius:8px;padding:12px 14px;margin:10px 0 14px;">
+      <div style="color:#475467;font-size:12px;margin-bottom:6px;">Ad Preview</div>
+      <div style="color:#101828;font-weight:600;">"${safePreview}"</div>
+    </div>
+    ${reasonHtml}
+    <p>If you believe this was done in error or have any questions, please contact our support team.</p>
+    <p>Thank you for using E‑Matrimonials.</p>
+  `;
+  const bodyText = `Hello ${params.email},
+Your matrimonial advertisement has been removed by our team.
+
+Ad Preview: "${params.contentPreview}"
+${params.reason ? `\nReason: ${params.reason}\n` : ''}
+If you believe this was done in error or have any questions, please contact our support team.
+Thank you for using E-Matrimonials.`;
+  return brandWrapper(subject, bodyHtml, bodyText);
+}

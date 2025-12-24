@@ -29,7 +29,7 @@ router.post('/request', sanitizeInput, validate(schemas.requestOtp), async (req,
   }
 });
 
-// POST /api/otp/verify
+// POST /api/otp/verify - Verify and consume OTP (deletes after verification)
 router.post('/verify', sanitizeInput, validate(schemas.verifyOtp), async (req, res) => {
   const { email, otp } = req.body;
   
@@ -71,6 +71,32 @@ router.post('/verify', sanitizeInput, validate(schemas.verifyOtp), async (req, r
   await db.delete(otps).where(eq(otps.email, email));
   
   res.json({ success: true, message: 'OTP verified' });
+});
+
+// POST /api/otp/check - Check OTP validity without deleting (for pre-verification)
+router.post('/check', sanitizeInput, validate(schemas.verifyOtp), async (req, res) => {
+  const { email, otp } = req.body;
+  
+  // Check OTP validity
+  const now = new Date();
+  const found = await db.select().from(otps).where(eq(otps.email, email));
+  
+  // Find the most recent valid OTP
+  const valid = found
+    .filter(r => {
+      const otpMatch = r.otp === otp;
+      const expiresAt = new Date(r.expiresAt + 'Z');
+      const notExpired = expiresAt > now;
+      return otpMatch && notExpired;
+    })
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+  
+  if (!valid) {
+    return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+  }
+  
+  // Don't delete - just confirm validity
+  res.json({ success: true, message: 'OTP is valid' });
 });
 
 export default router; 

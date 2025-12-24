@@ -141,6 +141,20 @@
       "when": 1760819080716,
       "tag": "0019_quick_fat_cobra",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1764100826280,
+      "tag": "0020_true_rogue",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1766557714857,
+      "tag": "0021_tricky_thunderbolt",
+      "breakpoints": true
     }
   ]
 }

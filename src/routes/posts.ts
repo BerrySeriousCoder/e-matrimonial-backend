@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../db';
-import { posts, users, otps, searchFilterOptions } from '../db/schema';
+import { posts, users, otps, searchFilterOptions, searchSynonymGroups, searchSynonymWords } from '../db/schema';
 import { eq, and, gt, isNull, inArray, desc } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
@@ -9,6 +9,53 @@ import { userAuth } from '../middleware/userAuth';
 import { sendEmail } from '../utils/sendEmail';
 import { tmplClientSubmitted } from '../utils/emailTemplates';
 import { trackAnalytics } from '../middleware/analytics';
+import { stripHtml, getTextLength } from '../utils/htmlUtils';
+
+// Helper function to expand search terms using synonym dictionary
+async function expandSearchTermsWithSynonyms(terms: string[]): Promise<string[]> {
+  const expandedTerms = new Set<string>();
+  
+  // Add original terms first
+  terms.forEach(term => expandedTerms.add(term.toLowerCase()));
+  
+  // Get all active synonym groups with their words
+  const synonymWords = await db
+    .select({
+      word: searchSynonymWords.word,
+      groupId: searchSynonymWords.groupId,
+    })
+    .from(searchSynonymWords)
+    .innerJoin(searchSynonymGroups, eq(searchSynonymWords.groupId, searchSynonymGroups.id))
+    .where(eq(searchSynonymGroups.isActive, true));
+  
+  // Create a map of word -> groupId for quick lookup
+  const wordToGroup = new Map<string, number>();
+  const groupToWords = new Map<number, string[]>();
+  
+  synonymWords.forEach(sw => {
+    const lowerWord = sw.word.toLowerCase();
+    wordToGroup.set(lowerWord, sw.groupId);
+    
+    if (!groupToWords.has(sw.groupId)) {
+      groupToWords.set(sw.groupId, []);
+    }
+    groupToWords.get(sw.groupId)!.push(lowerWord);
+  });
+  
+  // For each search term, check if it's in a synonym group
+  terms.forEach(term => {
+    const lowerTerm = term.toLowerCase();
+    const groupId = wordToGroup.get(lowerTerm);
+    
+    if (groupId !== undefined) {
+      // Add all words from this synonym group
+      const synonymsInGroup = groupToWords.get(groupId) || [];
+      synonymsInGroup.forEach(synonym => expandedTerms.add(synonym));
+    }
+  });
+  
+  return Array.from(expandedTerms);
+}
 
 const router = Router();
 
@@ -32,23 +79,35 @@ router.get('/', validateQuery(schemas.postsQuery), async (req, res) => {
     whereConditions.push(eq(posts.lookingFor, lookingFor));
   }
 
-  // Enhanced search filter with case-insensitive matching
+  // Enhanced search filter with case-insensitive matching and synonym expansion
   if (search) {
     const searchTerms = search.trim().toLowerCase().split(/\s+/);
     
-    // Create search conditions for each term
-    const searchConditions = searchTerms.map(term => 
-      sql`(
-        LOWER(${posts.email}) LIKE ${`%${term}%`} OR 
-        LOWER(${posts.content}) LIKE ${`%${term}%`} OR
-        ${posts.content} % ${term}
-      )`
-    );
-    
-    // All search terms must match (AND logic)
-    if (searchConditions.length > 0) {
+    // Expand each search term using synonym dictionary
+    // For each original term, we get all related synonyms and search for any of them
+    const termConditions = await Promise.all(searchTerms.map(async (term) => {
+      // Get expanded terms for this single term
+      const expandedTerms = await expandSearchTermsWithSynonyms([term]);
+      
+      // Create OR conditions for all expanded terms (synonyms)
+      const synonymConditions = expandedTerms.map(expandedTerm =>
+        sql`(
+          LOWER(${posts.email}) LIKE ${`%${expandedTerm}%`} OR 
+          LOWER(REGEXP_REPLACE(${posts.content}, '<[^>]*>', '', 'g')) LIKE ${`%${expandedTerm}%`}
+        )`
+      );
+      
+      // Any synonym can match for this term (OR logic for synonyms)
+      if (synonymConditions.length === 1) {
+        return synonymConditions[0];
+      }
+      return sql`(${synonymConditions.reduce((acc, condition) => sql`${acc} OR ${condition}`)})`;
+    }));
+
+    // All original search terms must match (AND logic across terms)
+    if (termConditions.length > 0) {
       // @ts-ignore - TypeScript issue with SQL conditions
-      whereConditions.push(and(...searchConditions));
+      whereConditions.push(and(...termConditions));
     }
   }
 
@@ -57,7 +116,7 @@ router.get('/', validateQuery(schemas.postsQuery), async (req, res) => {
     try {
       const selectedOptions = JSON.parse(filters);
       if (Array.isArray(selectedOptions) && selectedOptions.length > 0) {
-        
+
         // Get the filter options and their values
         const filterOptions = await db
           .select({
@@ -78,7 +137,7 @@ router.get('/', validateQuery(schemas.postsQuery), async (req, res) => {
         // For each section, find posts that match ANY option in that section
         const sectionConditions = Object.values(sectionGroups).map(sectionOptions => {
           const optionValues = sectionOptions.map(opt => opt.value);
-          
+
           // Create search conditions for each option value
           const optionConditions = optionValues.map(value => {
             const searchValue = value.toLowerCase();
@@ -87,7 +146,7 @@ router.get('/', validateQuery(schemas.postsQuery), async (req, res) => {
               LOWER(${posts.email}) LIKE ${`%${searchValue}%`}
             )`;
           });
-          
+
           // Any option in this section can match (OR logic within section)
           if (optionConditions.length === 1) {
             return optionConditions[0];
@@ -133,27 +192,27 @@ router.get('/', validateQuery(schemas.postsQuery), async (req, res) => {
 router.get('/:id', async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: 'Invalid ID' });
-  
+
   const result = await db.select().from(posts)
     .where(and(
       eq(posts.id, id),
       eq(posts.status, 'published'),
       gt(posts.expiresAt, new Date().toISOString())
     ));
-  
+
   if (!result.length) return res.status(404).json({ error: 'Not found' });
   res.json({ post: result[0] });
 });
 
 // POST /api/posts - create post with new logic
 router.post('/', sanitizeInput, validate(schemas.createPost), async (req, res) => {
-  const { 
-    email, 
-    content, 
-    otp, 
-    lookingFor, 
-    duration, 
-    fontSize, 
+  const {
+    email,
+    content,
+    otp,
+    lookingFor,
+    duration,
+    fontSize,
     bgColor,
     icon,
     couponCode
@@ -162,7 +221,7 @@ router.post('/', sanitizeInput, validate(schemas.createPost), async (req, res) =
   // Verify OTP
   const now = new Date();
   const found = await db.select().from(otps).where(eq(otps.email, email));
-  
+
   // Find the most recent valid OTP
   const valid = found
     .filter(r => {
@@ -173,28 +232,32 @@ router.post('/', sanitizeInput, validate(schemas.createPost), async (req, res) =
       return otpMatch && notExpired;
     })
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-  
+
   if (!valid) {
-    console.log('OTP verification failed:', { 
-      email, 
-      otp, 
-      now: now.toISOString(), 
+    console.log('OTP verification failed:', {
+      email,
+      otp,
+      now: now.toISOString(),
       found: found.map(f => {
         const expiresAt = new Date(f.expiresAt + 'Z');
         return {
-          otp: f.otp, 
+          otp: f.otp,
           expiresAt: f.expiresAt,
           expiresAtUTC: expiresAt.toISOString(),
           createdAt: f.createdAt,
           isExpired: expiresAt <= now
         };
-      }) 
+      })
     });
     return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
   }
-  
-  // Delete all OTPs for this email (cleanup)
-  await db.delete(otps).where(eq(otps.email, email));
+
+  // Delete all OTPs for this email (cleanup - non-blocking)
+  try {
+    await db.delete(otps).where(eq(otps.email, email));
+  } catch (otpDeleteError) {
+    console.warn('Failed to delete OTP after validation:', otpDeleteError);
+  }
 
   // Create post (expiresAt will be set when admin approves)
   const result = await db.insert(posts).values({
@@ -222,7 +285,7 @@ router.post('/', sanitizeInput, validate(schemas.createPost), async (req, res) =
     duration,
     fontSize,
     lookingFor,
-    characterCount: content.length,
+    characterCount: getTextLength(content),
     couponCode: couponCode || null
   })(req, res, () => {
     res.json({ success: true, message: 'Post created and pending approval', postId: result[0].id });
@@ -259,7 +322,7 @@ router.post('/authenticated', userAuth, sanitizeInput, validate(schemas.createAu
     duration,
     fontSize,
     lookingFor,
-    characterCount: content.length,
+    characterCount: getTextLength(content),
     couponCode: couponCode || null
   })(req, res, () => {
     res.json({ success: true, message: 'Post created and pending approval', postId: result[0].id });
