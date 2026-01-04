@@ -10,14 +10,15 @@ import { sendEmail } from '../utils/sendEmail';
 import { tmplClientSubmitted } from '../utils/emailTemplates';
 import { trackAnalytics } from '../middleware/analytics';
 import { stripHtml, getTextLength } from '../utils/htmlUtils';
+import { parseDbTimestampAsUtc } from '../utils/dateUtils';
 
 // Helper function to expand search terms using synonym dictionary
 async function expandSearchTermsWithSynonyms(terms: string[]): Promise<string[]> {
   const expandedTerms = new Set<string>();
-  
+
   // Add original terms first
   terms.forEach(term => expandedTerms.add(term.toLowerCase()));
-  
+
   // Get all active synonym groups with their words
   const synonymWords = await db
     .select({
@@ -27,33 +28,33 @@ async function expandSearchTermsWithSynonyms(terms: string[]): Promise<string[]>
     .from(searchSynonymWords)
     .innerJoin(searchSynonymGroups, eq(searchSynonymWords.groupId, searchSynonymGroups.id))
     .where(eq(searchSynonymGroups.isActive, true));
-  
+
   // Create a map of word -> groupId for quick lookup
   const wordToGroup = new Map<string, number>();
   const groupToWords = new Map<number, string[]>();
-  
+
   synonymWords.forEach(sw => {
     const lowerWord = sw.word.toLowerCase();
     wordToGroup.set(lowerWord, sw.groupId);
-    
+
     if (!groupToWords.has(sw.groupId)) {
       groupToWords.set(sw.groupId, []);
     }
     groupToWords.get(sw.groupId)!.push(lowerWord);
   });
-  
+
   // For each search term, check if it's in a synonym group
   terms.forEach(term => {
     const lowerTerm = term.toLowerCase();
     const groupId = wordToGroup.get(lowerTerm);
-    
+
     if (groupId !== undefined) {
       // Add all words from this synonym group
       const synonymsInGroup = groupToWords.get(groupId) || [];
       synonymsInGroup.forEach(synonym => expandedTerms.add(synonym));
     }
   });
-  
+
   return Array.from(expandedTerms);
 }
 
@@ -82,13 +83,13 @@ router.get('/', validateQuery(schemas.postsQuery), async (req, res) => {
   // Enhanced search filter with case-insensitive matching and synonym expansion
   if (search) {
     const searchTerms = search.trim().toLowerCase().split(/\s+/);
-    
+
     // Expand each search term using synonym dictionary
     // For each original term, we get all related synonyms and search for any of them
     const termConditions = await Promise.all(searchTerms.map(async (term) => {
       // Get expanded terms for this single term
       const expandedTerms = await expandSearchTermsWithSynonyms([term]);
-      
+
       // Create OR conditions for all expanded terms (synonyms)
       const synonymConditions = expandedTerms.map(expandedTerm =>
         sql`(
@@ -96,7 +97,7 @@ router.get('/', validateQuery(schemas.postsQuery), async (req, res) => {
           LOWER(REGEXP_REPLACE(${posts.content}, '<[^>]*>', '', 'g')) LIKE ${`%${expandedTerm}%`}
         )`
       );
-      
+
       // Any synonym can match for this term (OR logic for synonyms)
       if (synonymConditions.length === 1) {
         return synonymConditions[0];
@@ -226,12 +227,11 @@ router.post('/', sanitizeInput, validate(schemas.createPost), async (req, res) =
   const valid = found
     .filter(r => {
       const otpMatch = r.otp === otp;
-      // Convert database timestamp to UTC Date object for proper comparison
-      const expiresAt = new Date(r.expiresAt + 'Z'); // Add Z to make it UTC
+      const expiresAt = parseDbTimestampAsUtc(r.expiresAt);
       const notExpired = expiresAt > now;
       return otpMatch && notExpired;
     })
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    .sort((a, b) => parseDbTimestampAsUtc(b.createdAt).getTime() - parseDbTimestampAsUtc(a.createdAt).getTime())[0];
 
   if (!valid) {
     console.log('OTP verification failed:', {
@@ -239,7 +239,7 @@ router.post('/', sanitizeInput, validate(schemas.createPost), async (req, res) =
       otp,
       now: now.toISOString(),
       found: found.map(f => {
-        const expiresAt = new Date(f.expiresAt + 'Z');
+        const expiresAt = parseDbTimestampAsUtc(f.expiresAt);
         return {
           otp: f.otp,
           expiresAt: f.expiresAt,

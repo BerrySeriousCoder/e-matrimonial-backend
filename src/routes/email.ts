@@ -3,7 +3,7 @@ import multer from 'multer';
 import { sendEmail, EmailAttachment } from '../utils/sendEmail';
 import { db } from '../db';
 import { posts, otps, users } from '../db/schema';
-import { eq, and, gte } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { validate, schemas } from '../middleware/validation';
 import { sanitizeInput } from '../middleware/validation';
 import { stripHtml } from '../utils/htmlUtils';
@@ -16,6 +16,7 @@ import {
 import { trackEmailEvent } from '../middleware/analytics';
 import { tmplNewMessageToPoster } from '../utils/emailTemplates';
 import { moderateImage, isAllowedImageType, MAX_IMAGE_SIZE } from '../utils/imageModeration';
+import { parseDbTimestampAsUtc } from '../utils/dateUtils';
 
 const router = express.Router();
 
@@ -55,12 +56,12 @@ const uploadWithErrorHandling = (fieldName: string) => {
           message: err.message || 'Error uploading file',
         });
       }
-      
+
       // Convert postId from string to number (FormData sends everything as strings)
       if (req.body && req.body.postId) {
         req.body.postId = parseInt(req.body.postId, 10);
       }
-      
+
       next();
     });
   };
@@ -77,7 +78,7 @@ router.post('/send', uploadWithErrorHandling('attachment'), sanitizeInput, valid
     if (file) {
       console.log('Moderating uploaded image:', { filename: file.originalname, size: file.size, type: file.mimetype });
       const moderationResult = await moderateImage(file.buffer);
-      
+
       if (!moderationResult.safe) {
         console.log('Image rejected by moderation:', moderationResult);
         return res.status(400).json({
@@ -96,14 +97,17 @@ router.post('/send', uploadWithErrorHandling('attachment'), sanitizeInput, valid
     }
 
     // Verify OTP
-    const otpRecord = await db.select().from(otps)
+    const otpRecords = await db.select().from(otps)
       .where(and(
         eq(otps.email, email),
-        eq(otps.otp, otp),
-        gte(otps.expiresAt, new Date().toISOString())
+        eq(otps.otp, otp)
       ));
 
-    if (otpRecord.length === 0) {
+    // Filter for non-expired OTPs using proper Date comparison
+    const now = new Date();
+    const validOtp = otpRecords.find(r => parseDbTimestampAsUtc(r.expiresAt) > now);
+
+    if (!validOtp) {
       return res.status(400).json({
         success: false,
         message: 'Invalid or expired OTP'
@@ -213,7 +217,7 @@ router.post('/send-authenticated', uploadWithErrorHandling('attachment'), userAu
     if (file) {
       console.log('Moderating uploaded image:', { filename: file.originalname, size: file.size, type: file.mimetype });
       const moderationResult = await moderateImage(file.buffer);
-      
+
       if (!moderationResult.safe) {
         console.log('Image rejected by moderation:', moderationResult);
         return res.status(400).json({
