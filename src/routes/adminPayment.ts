@@ -27,6 +27,7 @@ const adminPaymentSchemas = {
     expiresAt: Joi.date().optional().allow(null, ''),
   }),
   updateCoupon: Joi.object({
+    code: Joi.string().min(3).max(50).optional(),
     discountPercentage: Joi.number().min(0).max(100).optional(),
     isActive: Joi.boolean().optional(),
     usageLimit: Joi.number().integer().min(1).optional().allow(null),
@@ -128,7 +129,7 @@ router.get('/coupons', requireRole(['superadmin', 'admin']), async (req, res) =>
         isActive: coupon.isActive,
         usageLimit: coupon.usageLimit,
         usedCount: coupon.usedCount,
-        expiresAt: coupon.expiresAt,
+        expiresAt: coupon.expiresAt ? new Date(coupon.expiresAt).toISOString() : null,
         createdAt: coupon.createdAt,
         usagePercentage: coupon.usageLimit ? (coupon.usedCount / coupon.usageLimit) * 100 : 0,
       }))
