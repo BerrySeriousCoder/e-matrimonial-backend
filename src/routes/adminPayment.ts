@@ -22,14 +22,15 @@ const adminPaymentSchemas = {
   createCoupon: Joi.object({
     code: Joi.string().min(3).max(50).required(),
     discountPercentage: Joi.number().min(0).max(100).required(),
-    usageLimit: Joi.number().integer().min(1).optional(),
-    expiresAt: Joi.date().optional(),
+    isActive: Joi.boolean().optional(),
+    usageLimit: Joi.number().integer().min(1).optional().allow(null),
+    expiresAt: Joi.date().optional().allow(null, ''),
   }),
   updateCoupon: Joi.object({
     discountPercentage: Joi.number().min(0).max(100).optional(),
     isActive: Joi.boolean().optional(),
-    usageLimit: Joi.number().integer().min(1).optional(),
-    expiresAt: Joi.date().optional(),
+    usageLimit: Joi.number().integer().min(1).optional().allow(null),
+    expiresAt: Joi.date().optional().allow(null, ''),
   }),
 };
 
@@ -37,7 +38,7 @@ const adminPaymentSchemas = {
 router.get('/config', requireSuperadminAuth, async (req, res) => {
   try {
     const [config] = await db.select().from(paymentConfigs).where(eq(paymentConfigs.id, 1));
-    
+
     if (!config) {
       return res.status(404).json({ success: false, message: 'Payment configuration not found' });
     }
@@ -76,7 +77,7 @@ router.put('/config', requireSuperadminAuth, sanitizeInput, validate(adminPaymen
 
     // Get current config for logging
     const [currentConfig] = await db.select().from(paymentConfigs).where(eq(paymentConfigs.id, 1));
-    
+
     const [updatedConfig] = await db.update(paymentConfigs)
       .set({
         basePriceFirst200,
@@ -141,7 +142,7 @@ router.get('/coupons', requireRole(['superadmin', 'admin']), async (req, res) =>
 // POST /api/admin/coupons - Create new coupon code
 router.post('/coupons', requireSuperadminAuth, sanitizeInput, validate(adminPaymentSchemas.createCoupon), async (req: any, res) => {
   try {
-    const { code, discountPercentage, usageLimit, expiresAt } = req.body;
+    const { code, discountPercentage, isActive, usageLimit, expiresAt } = req.body;
 
     // Check if coupon code already exists
     const [existingCoupon] = await db.select()
@@ -155,7 +156,8 @@ router.post('/coupons', requireSuperadminAuth, sanitizeInput, validate(adminPaym
     const [newCoupon] = await db.insert(couponCodes).values({
       code,
       discountPercentage: discountPercentage.toString(),
-      usageLimit,
+      isActive: isActive !== undefined ? isActive : true,
+      usageLimit: usageLimit || null,
       expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
     }).returning();
 
