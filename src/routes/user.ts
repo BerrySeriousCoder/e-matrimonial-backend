@@ -207,10 +207,53 @@ router.get('/selected-profiles', requireAuth, async (req: AuthRequest, res: Resp
   const selected = await db.select().from(userSelectedProfiles).where(eq(userSelectedProfiles.userId, userId));
   const profileIds = selected.map(s => s.profileId);
   let profiles: any[] = [];
+  let expiredCount = 0;
+
   if (profileIds.length > 0) {
-    profiles = await db.select().from(posts).where(inArray(posts.id, profileIds));
+    // Get all profiles (including expired/deleted)
+    const allProfiles = await db.select().from(posts).where(inArray(posts.id, profileIds));
+
+    const now = new Date();
+    const activeProfiles: any[] = [];
+    const expiredProfileIds: number[] = [];
+
+    allProfiles.forEach(profile => {
+      const isExpired = profile.expiresAt && new Date(profile.expiresAt) < now;
+      const isDeleted = profile.status === 'deleted' || profile.status === 'archived';
+
+      if (isExpired || isDeleted) {
+        expiredProfileIds.push(profile.id);
+      } else if (profile.status === 'published') {
+        activeProfiles.push(profile);
+      } else {
+        // Non-published (pending, payment_pending, etc.) - still count as expired/unavailable
+        expiredProfileIds.push(profile.id);
+      }
+    });
+
+    // Also check for profiles that no longer exist in DB
+    const foundIds = allProfiles.map(p => p.id);
+    const deletedFromDb = profileIds.filter(id => !foundIds.includes(id));
+
+    // Clean up expired/deleted selections from user's saved list
+    const allExpiredIds = [...expiredProfileIds, ...deletedFromDb];
+    if (allExpiredIds.length > 0) {
+      await db.delete(userSelectedProfiles)
+        .where(and(
+          eq(userSelectedProfiles.userId, userId),
+          inArray(userSelectedProfiles.profileId, allExpiredIds)
+        ));
+    }
+
+    profiles = activeProfiles;
+    expiredCount = allExpiredIds.length;
   }
-  res.json({ success: true, selected: profiles });
+
+  res.json({
+    success: true,
+    selected: profiles,
+    expiredCount // Number of profiles that were expired/deleted and removed
+  });
 });
 
 export default router; 

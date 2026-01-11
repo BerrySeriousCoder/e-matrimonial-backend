@@ -1,0 +1,2 @@
+ALTER TABLE "payment_configs" ADD COLUMN "icon_price" integer DEFAULT 100 NOT NULL;--> statement-breakpoint
+ALTER TABLE "payment_configs" ADD COLUMN "highlight_color_price" integer DEFAULT 100 NOT NULL;

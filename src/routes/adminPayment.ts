@@ -18,6 +18,8 @@ const adminPaymentSchemas = {
     visibility2WeeksMultiplier: Joi.number().min(0.1).max(5.0).required(),
     visibility3WeeksMultiplier: Joi.number().min(0.1).max(5.0).required(),
     visibility4WeeksMultiplier: Joi.number().min(0.1).max(5.0).required(),
+    iconPrice: Joi.number().integer().min(0).required(),
+    highlightColorPrice: Joi.number().integer().min(0).required(),
   }),
   createCoupon: Joi.object({
     code: Joi.string().min(3).max(50).required(),
@@ -54,6 +56,8 @@ router.get('/config', requireSuperadminAuth, async (req, res) => {
         visibility2WeeksMultiplier: Number(config.visibility2WeeksMultiplier),
         visibility3WeeksMultiplier: Number(config.visibility3WeeksMultiplier),
         visibility4WeeksMultiplier: Number(config.visibility4WeeksMultiplier),
+        iconPrice: config.iconPrice,
+        highlightColorPrice: config.highlightColorPrice,
         createdAt: config.createdAt,
         updatedAt: config.updatedAt,
       }
@@ -74,6 +78,8 @@ router.put('/config', requireSuperadminAuth, sanitizeInput, validate(adminPaymen
       visibility2WeeksMultiplier,
       visibility3WeeksMultiplier,
       visibility4WeeksMultiplier,
+      iconPrice,
+      highlightColorPrice,
     } = req.body;
 
     // Get current config for logging
@@ -87,6 +93,8 @@ router.put('/config', requireSuperadminAuth, sanitizeInput, validate(adminPaymen
         visibility2WeeksMultiplier: visibility2WeeksMultiplier.toString(),
         visibility3WeeksMultiplier: visibility3WeeksMultiplier.toString(),
         visibility4WeeksMultiplier: visibility4WeeksMultiplier.toString(),
+        iconPrice,
+        highlightColorPrice,
         updatedAt: new Date().toISOString(),
       })
       .where(eq(paymentConfigs.id, 1))

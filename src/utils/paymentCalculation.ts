@@ -27,6 +27,8 @@ export interface PaymentConfig {
   visibility2WeeksMultiplier: number;
   visibility3WeeksMultiplier: number;
   visibility4WeeksMultiplier: number;
+  iconPrice: number;
+  highlightColorPrice: number;
 }
 
 export async function getPaymentConfig(): Promise<PaymentConfig> {
@@ -41,6 +43,8 @@ export async function getPaymentConfig(): Promise<PaymentConfig> {
       visibility2WeeksMultiplier: 1.00,
       visibility3WeeksMultiplier: 1.50,
       visibility4WeeksMultiplier: 2.00,
+      iconPrice: 100,
+      highlightColorPrice: 100,
     };
   }
 
@@ -51,6 +55,8 @@ export async function getPaymentConfig(): Promise<PaymentConfig> {
     visibility2WeeksMultiplier: Number(config.visibility2WeeksMultiplier),
     visibility3WeeksMultiplier: Number(config.visibility3WeeksMultiplier),
     visibility4WeeksMultiplier: Number(config.visibility4WeeksMultiplier),
+    iconPrice: config.iconPrice,
+    highlightColorPrice: config.highlightColorPrice,
   };
 }
 
@@ -89,11 +95,11 @@ export async function calculatePaymentAmount(
     visibilityMultiplier = 1.0; // Default fallback
   }
 
-  // Icon cost (100 rupees if icon is selected)
-  const iconCost = icon ? 100 : 0;
+  // Icon cost (configurable price if icon is selected)
+  const iconCost = icon ? config.iconPrice : 0;
 
-  // Highlight color cost (100 rupees if non-default color is selected)
-  const highlightColorCost = (bgColor && bgColor !== '#ffffff') ? 100 : 0;
+  // Highlight color cost (configurable price if non-default color is selected)
+  const highlightColorCost = (bgColor && bgColor !== '#ffffff') ? config.highlightColorPrice : 0;
 
   // Subtotal is computed on (base + additional + icon + highlightColor) before applying multipliers
   const subtotalBeforeMultipliers = baseAmount + additionalCost + iconCost + highlightColorCost;

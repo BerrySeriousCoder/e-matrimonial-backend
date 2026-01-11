@@ -189,6 +189,8 @@ export const paymentConfigs = pgTable("payment_configs", {
 	visibility2WeeksMultiplier: numeric("visibility_2_weeks_multiplier", { precision: 3, scale: 2 }).default('1.00').notNull(),
 	visibility3WeeksMultiplier: numeric("visibility_3_weeks_multiplier", { precision: 3, scale: 2 }).default('1.50').notNull(),
 	visibility4WeeksMultiplier: numeric("visibility_4_weeks_multiplier", { precision: 3, scale: 2 }).default('2.00').notNull(),
+	iconPrice: integer("icon_price").default(100).notNull(),
+	highlightColorPrice: integer("highlight_color_price").default(100).notNull(),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
 });
