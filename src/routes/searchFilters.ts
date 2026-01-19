@@ -7,6 +7,17 @@ import { validate, sanitizeInput, schemas } from '../middleware/validation';
 
 const router = Router();
 
+// Helper function to convert string to Title Case
+// e.g., "GORI" -> "Gori", "fair skin" -> "Fair Skin", "gORI" -> "Gori"
+const toTitleCase = (str: string): string => {
+  if (!str) return str;
+  return str
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
 // Helper function to reorder sections
 const reorderSections = async (targetId: number, newOrder: number) => {
   const allSections = await db
@@ -18,7 +29,7 @@ const reorderSections = async (targetId: number, newOrder: number) => {
   if (!targetSection) return;
 
   const oldOrder = targetSection.order;
-  
+
   // If moving to the same position, just normalize to fix any existing duplicates
   if (oldOrder === newOrder) {
     const allAfter = await db
@@ -40,7 +51,7 @@ const reorderSections = async (targetId: number, newOrder: number) => {
     // Moving down: shift items between oldOrder+1 and newOrder up by 1
     await db
       .update(searchFilterSections)
-      .set({ 
+      .set({
         order: sql`${searchFilterSections.order} - 1`,
         updatedAt: new Date().toISOString()
       })
@@ -52,7 +63,7 @@ const reorderSections = async (targetId: number, newOrder: number) => {
     // Moving up: shift items between newOrder and oldOrder-1 down by 1
     await db
       .update(searchFilterSections)
-      .set({ 
+      .set({
         order: sql`${searchFilterSections.order} + 1`,
         updatedAt: new Date().toISOString()
       })
@@ -95,7 +106,7 @@ const reorderOptions = async (targetId: number, sectionId: number, newOrder: num
   if (!targetOption) return;
 
   const oldOrder = targetOption.order;
-  
+
   // If moving to the same position, no need to reorder
   if (oldOrder === newOrder) {
     // Still run normalization to fix any existing duplicates
@@ -119,7 +130,7 @@ const reorderOptions = async (targetId: number, sectionId: number, newOrder: num
     // Moving down: shift items between oldOrder+1 and newOrder up by 1
     await db
       .update(searchFilterOptions)
-      .set({ 
+      .set({
         order: sql`${searchFilterOptions.order} - 1`,
         updatedAt: new Date().toISOString()
       })
@@ -132,7 +143,7 @@ const reorderOptions = async (targetId: number, sectionId: number, newOrder: num
     // Moving up: shift items between newOrder and oldOrder-1 down by 1
     await db
       .update(searchFilterOptions)
-      .set({ 
+      .set({
         order: sql`${searchFilterOptions.order} + 1`,
         updatedAt: new Date().toISOString()
       })
@@ -201,7 +212,7 @@ router.get('/admin', requireSuperadminAuth, async (req, res) => {
       .select()
       .from(searchFilterSections)
       .orderBy(asc(searchFilterSections.order), asc(searchFilterSections.id));
-    
+
     for (let i = 0; i < sectionsToNormalize.length; i++) {
       if (sectionsToNormalize[i].order !== i + 1) {
         await db
@@ -218,7 +229,7 @@ router.get('/admin', requireSuperadminAuth, async (req, res) => {
         .from(searchFilterOptions)
         .where(eq(searchFilterOptions.sectionId, section.id))
         .orderBy(asc(searchFilterOptions.order), asc(searchFilterOptions.id));
-      
+
       for (let i = 0; i < optionsToNormalize.length; i++) {
         if (optionsToNormalize[i].order !== i + 1) {
           await db
@@ -257,7 +268,7 @@ router.get('/admin', requireSuperadminAuth, async (req, res) => {
 router.post('/sections', requireSuperadminAuth, sanitizeInput, validate(schemas.createSearchFilterSection), async (req, res) => {
   try {
     const { name, displayName, description, order } = req.body;
-    
+
     // Check if section name already exists
     const existingSection = await db
       .select()
@@ -266,9 +277,9 @@ router.post('/sections', requireSuperadminAuth, sanitizeInput, validate(schemas.
       .limit(1);
 
     if (existingSection.length > 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Section name already exists' 
+      return res.status(400).json({
+        success: false,
+        message: 'Section name already exists'
       });
     }
 
@@ -276,15 +287,15 @@ router.post('/sections', requireSuperadminAuth, sanitizeInput, validate(schemas.
     const targetOrder = order || 1;
     await db
       .update(searchFilterSections)
-      .set({ 
+      .set({
         order: sql`${searchFilterSections.order} + 1`,
         updatedAt: new Date().toISOString()
       })
       .where(gte(searchFilterSections.order, targetOrder));
-    
+
     const result = await db.insert(searchFilterSections).values({
       name,
-      displayName,
+      displayName: toTitleCase(displayName),
       description,
       order: targetOrder,
     }).returning();
@@ -303,15 +314,15 @@ router.post('/sections', requireSuperadminAuth, sanitizeInput, validate(schemas.
       }
     }
 
-    res.json({ 
+    res.json({
       success: true,
-      section: result[0] 
+      section: result[0]
     });
   } catch (error) {
     console.error('Error creating search filter section:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      error: 'Internal server error' 
+      error: 'Internal server error'
     });
   }
 });
@@ -321,7 +332,7 @@ router.put('/sections/:id', requireSuperadminAuth, sanitizeInput, validate(schem
   try {
     const { id } = req.params;
     const { name, displayName, description, order, isActive } = req.body;
-    
+
     // Check if section exists
     const existingSection = await db
       .select()
@@ -330,9 +341,9 @@ router.put('/sections/:id', requireSuperadminAuth, sanitizeInput, validate(schem
       .limit(1);
 
     if (existingSection.length === 0) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Section not found' 
+        message: 'Section not found'
       });
     }
 
@@ -347,26 +358,26 @@ router.put('/sections/:id', requireSuperadminAuth, sanitizeInput, validate(schem
       .limit(1);
 
     if (nameConflict.length > 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: 'Section name already exists' 
+        message: 'Section name already exists'
       });
     }
 
     const oldOrder = existingSection[0].order;
-    
+
     // Update basic fields first (excluding order)
     await db
       .update(searchFilterSections)
       .set({
         name,
-        displayName,
+        displayName: toTitleCase(displayName),
         description,
         isActive,
         updatedAt: new Date().toISOString(),
       })
       .where(eq(searchFilterSections.id, parseInt(id)));
-    
+
     // Then handle reordering if the order has changed
     if (oldOrder !== order) {
       await reorderSections(parseInt(id), order);
@@ -374,7 +385,7 @@ router.put('/sections/:id', requireSuperadminAuth, sanitizeInput, validate(schem
       // Even if order didn't change, normalize to fix any existing duplicates
       await reorderSections(parseInt(id), order);
     }
-    
+
     // Fetch the updated section
     const result = await db
       .select()
@@ -382,15 +393,15 @@ router.put('/sections/:id', requireSuperadminAuth, sanitizeInput, validate(schem
       .where(eq(searchFilterSections.id, parseInt(id)))
       .limit(1);
 
-    res.json({ 
+    res.json({
       success: true,
-      section: result[0] 
+      section: result[0]
     });
   } catch (error) {
     console.error('Error updating search filter section:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      error: 'Internal server error' 
+      error: 'Internal server error'
     });
   }
 });
@@ -399,7 +410,7 @@ router.put('/sections/:id', requireSuperadminAuth, sanitizeInput, validate(schem
 router.delete('/sections/:id', requireSuperadminAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Check if section exists
     const existingSection = await db
       .select()
@@ -408,9 +419,9 @@ router.delete('/sections/:id', requireSuperadminAuth, async (req, res) => {
       .limit(1);
 
     if (existingSection.length === 0) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Section not found' 
+        message: 'Section not found'
       });
     }
 
@@ -431,15 +442,15 @@ router.delete('/sections/:id', requireSuperadminAuth, async (req, res) => {
       }
     }
 
-    res.json({ 
+    res.json({
       success: true,
-      message: 'Section deleted successfully' 
+      message: 'Section deleted successfully'
     });
   } catch (error) {
     console.error('Error deleting search filter section:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      error: 'Internal server error' 
+      error: 'Internal server error'
     });
   }
 });
@@ -448,7 +459,7 @@ router.delete('/sections/:id', requireSuperadminAuth, async (req, res) => {
 router.post('/options', requireSuperadminAuth, sanitizeInput, validate(schemas.createSearchFilterOption), async (req, res) => {
   try {
     const { sectionId, value, displayName, order } = req.body;
-    
+
     // Check if section exists
     const existingSection = await db
       .select()
@@ -457,9 +468,9 @@ router.post('/options', requireSuperadminAuth, sanitizeInput, validate(schemas.c
       .limit(1);
 
     if (existingSection.length === 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: 'Section not found' 
+        message: 'Section not found'
       });
     }
 
@@ -474,9 +485,9 @@ router.post('/options', requireSuperadminAuth, sanitizeInput, validate(schemas.c
       .limit(1);
 
     if (existingOption.length > 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: 'Option value already exists in this section' 
+        message: 'Option value already exists in this section'
       });
     }
 
@@ -484,7 +495,7 @@ router.post('/options', requireSuperadminAuth, sanitizeInput, validate(schemas.c
     const targetOrder = order || 1;
     await db
       .update(searchFilterOptions)
-      .set({ 
+      .set({
         order: sql`${searchFilterOptions.order} + 1`,
         updatedAt: new Date().toISOString()
       })
@@ -492,11 +503,11 @@ router.post('/options', requireSuperadminAuth, sanitizeInput, validate(schemas.c
         eq(searchFilterOptions.sectionId, sectionId),
         gte(searchFilterOptions.order, targetOrder)
       ));
-    
+
     const result = await db.insert(searchFilterOptions).values({
       sectionId,
       value,
-      displayName,
+      displayName: toTitleCase(displayName),
       order: targetOrder,
     }).returning();
 
@@ -515,15 +526,15 @@ router.post('/options', requireSuperadminAuth, sanitizeInput, validate(schemas.c
       }
     }
 
-    res.json({ 
+    res.json({
       success: true,
-      option: result[0] 
+      option: result[0]
     });
   } catch (error) {
     console.error('Error creating search filter option:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      error: 'Internal server error' 
+      error: 'Internal server error'
     });
   }
 });
@@ -533,7 +544,7 @@ router.put('/options/:id', requireSuperadminAuth, sanitizeInput, validate(schema
   try {
     const { id } = req.params;
     const { sectionId, value, displayName, order, isActive } = req.body;
-    
+
     // Check if option exists
     const existingOption = await db
       .select()
@@ -542,9 +553,9 @@ router.put('/options/:id', requireSuperadminAuth, sanitizeInput, validate(schema
       .limit(1);
 
     if (existingOption.length === 0) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Option not found' 
+        message: 'Option not found'
       });
     }
 
@@ -556,9 +567,9 @@ router.put('/options/:id', requireSuperadminAuth, sanitizeInput, validate(schema
       .limit(1);
 
     if (existingSection.length === 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: 'Section not found' 
+        message: 'Section not found'
       });
     }
 
@@ -574,22 +585,22 @@ router.put('/options/:id', requireSuperadminAuth, sanitizeInput, validate(schema
       .limit(1);
 
     if (valueConflict.length > 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: 'Option value already exists in this section' 
+        message: 'Option value already exists in this section'
       });
     }
 
     const oldOrder = existingOption[0].order;
     const oldSectionId = existingOption[0].sectionId;
-    
+
     // Update the option (do NOT update order directly)
     const result = await db
       .update(searchFilterOptions)
       .set({
         sectionId,
         value,
-        displayName,
+        displayName: toTitleCase(displayName),
         isActive,
         updatedAt: new Date().toISOString(),
       })
@@ -607,7 +618,7 @@ router.put('/options/:id', requireSuperadminAuth, sanitizeInput, validate(schema
           .from(searchFilterOptions)
           .where(eq(searchFilterOptions.sectionId, oldSectionId))
           .orderBy(asc(searchFilterOptions.order), asc(searchFilterOptions.id));
-        
+
         for (let i = 0; i < oldSectionOptions.length; i++) {
           if (oldSectionOptions[i].order !== i + 1) {
             await db
@@ -616,7 +627,7 @@ router.put('/options/:id', requireSuperadminAuth, sanitizeInput, validate(schema
               .where(eq(searchFilterOptions.id, oldSectionOptions[i].id));
           }
         }
-        
+
         // Then reorder the new section
         await reorderOptions(parseInt(id), sectionId, order);
       } else {
@@ -628,15 +639,15 @@ router.put('/options/:id', requireSuperadminAuth, sanitizeInput, validate(schema
       await reorderOptions(parseInt(id), sectionId, order);
     }
 
-    res.json({ 
+    res.json({
       success: true,
-      option: result[0] 
+      option: result[0]
     });
   } catch (error) {
     console.error('Error updating search filter option:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      error: 'Internal server error' 
+      error: 'Internal server error'
     });
   }
 });
@@ -645,7 +656,7 @@ router.put('/options/:id', requireSuperadminAuth, sanitizeInput, validate(schema
 router.delete('/options/:id', requireSuperadminAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Check if option exists
     const existingOption = await db
       .select()
@@ -654,14 +665,14 @@ router.delete('/options/:id', requireSuperadminAuth, async (req, res) => {
       .limit(1);
 
     if (existingOption.length === 0) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Option not found' 
+        message: 'Option not found'
       });
     }
 
     const sectionId = existingOption[0].sectionId;
-    
+
     // Delete option (cascade will handle tags)
     await db.delete(searchFilterOptions).where(eq(searchFilterOptions.id, parseInt(id)));
 
@@ -680,15 +691,15 @@ router.delete('/options/:id', requireSuperadminAuth, async (req, res) => {
       }
     }
 
-    res.json({ 
+    res.json({
       success: true,
-      message: 'Option deleted successfully' 
+      message: 'Option deleted successfully'
     });
   } catch (error) {
     console.error('Error deleting search filter option:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      error: 'Internal server error' 
+      error: 'Internal server error'
     });
   }
 });

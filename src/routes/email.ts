@@ -35,15 +35,21 @@ const upload = multer({
   },
 });
 
-// Wrapper to handle multer errors properly
-const uploadWithErrorHandling = (fieldName: string) => {
+// Wrapper to handle multer errors properly (supports multiple files)
+const uploadWithErrorHandling = (fieldName: string, maxCount: number = 4) => {
   return (req: any, res: any, next: express.NextFunction) => {
-    upload.single(fieldName)(req, res, (err: any) => {
+    upload.array(fieldName, maxCount)(req, res, (err: any) => {
       if (err instanceof multer.MulterError) {
         if (err.code === 'LIMIT_FILE_SIZE') {
           return res.status(400).json({
             success: false,
-            message: 'Image file is too large. Maximum size is 5MB.',
+            message: 'Image file is too large. Maximum size is 3MB per image.',
+          });
+        }
+        if (err.code === 'LIMIT_FILE_COUNT') {
+          return res.status(400).json({
+            success: false,
+            message: `Maximum ${maxCount} attachments allowed.`,
           });
         }
         return res.status(400).json({
@@ -62,38 +68,45 @@ const uploadWithErrorHandling = (fieldName: string) => {
         req.body.postId = parseInt(req.body.postId, 10);
       }
 
+      // Convert forceResend from string to boolean
+      if (req.body && req.body.forceResend) {
+        req.body.forceResend = req.body.forceResend === 'true';
+      }
+
       next();
     });
   };
 };
 
 // Send email (for anonymous users - requires OTP)
-router.post('/send', uploadWithErrorHandling('attachment'), sanitizeInput, validate(schemas.sendEmail), async (req: any, res: any) => {
+router.post('/send', uploadWithErrorHandling('attachments'), sanitizeInput, validate(schemas.sendEmail), async (req: any, res: any) => {
   try {
-    const { email, message, postId, otp } = req.body;
-    const file = req.file as Express.Multer.File | undefined;
+    const { email, message, postId, otp, forceResend } = req.body;
+    const files = req.files as Express.Multer.File[] | undefined;
 
-    // If attachment provided, moderate it first
-    let attachment: EmailAttachment | undefined;
-    if (file) {
-      console.log('Moderating uploaded image:', { filename: file.originalname, size: file.size, type: file.mimetype });
-      const moderationResult = await moderateImage(file.buffer);
+    // If attachments provided, moderate each one
+    const attachments: EmailAttachment[] = [];
+    if (files && files.length > 0) {
+      for (const file of files) {
+        console.log('Moderating uploaded image:', { filename: file.originalname, size: file.size, type: file.mimetype });
+        const moderationResult = await moderateImage(file.buffer);
 
-      if (!moderationResult.safe) {
-        console.log('Image rejected by moderation:', moderationResult);
-        return res.status(400).json({
-          success: false,
-          message: moderationResult.reason || 'Image failed content moderation.',
+        if (!moderationResult.safe) {
+          console.log('Image rejected by moderation:', moderationResult);
+          return res.status(400).json({
+            success: false,
+            message: `Image "${file.originalname}" failed content moderation: ${moderationResult.reason || 'Inappropriate content detected.'}`,
+          });
+        }
+
+        // Image is safe, add to attachments
+        attachments.push({
+          content: file.buffer.toString('base64'),
+          filename: file.originalname,
+          type: file.mimetype,
+          disposition: 'attachment',
         });
       }
-
-      // Image is safe, prepare attachment
-      attachment = {
-        content: file.buffer.toString('base64'),
-        filename: file.originalname,
-        type: file.mimetype,
-        disposition: 'attachment',
-      };
     }
 
     // Verify OTP
@@ -114,9 +127,17 @@ router.post('/send', uploadWithErrorHandling('attachment'), sanitizeInput, valid
       });
     }
 
-    // Validate email request (check if already sent to this post)
-    const validation = await validateEmailRequest(email, postId, message);
+    // Validate email request (check if already sent to this post, unless forceResend)
+    const validation = await validateEmailRequest(email, postId, message, undefined, forceResend);
     if (!validation.valid) {
+      // If it's a duplicate email error, return the history for the frontend to display
+      if (validation.error === 'duplicate_email' && validation.previousEmails) {
+        return res.status(400).json({
+          success: false,
+          message: 'duplicate_email',
+          previousEmails: validation.previousEmails
+        });
+      }
       return res.status(400).json({
         success: false,
         message: validation.error
@@ -153,9 +174,9 @@ router.post('/send', uploadWithErrorHandling('attachment'), sanitizeInput, valid
         text,
         html,
         replyTo: email,
-        attachments: attachment ? [attachment] : undefined,
+        attachments: attachments.length > 0 ? attachments : undefined,
       });
-      console.log(`Email successfully sent to ${post[0].email} from ${email} for post ${postId}`, attachment ? '(with attachment)' : '');
+      console.log(`Email successfully sent to ${post[0].email} from ${email} for post ${postId}`, attachments.length > 0 ? `(with ${attachments.length} attachment(s))` : '');
     } catch (emailError: any) {
       // Log detailed error before re-throwing
       console.error('Failed to send email via SendGrid:', {
@@ -205,39 +226,49 @@ router.post('/send', uploadWithErrorHandling('attachment'), sanitizeInput, valid
 });
 
 // Send authenticated email (for logged-in users - no OTP required)
-router.post('/send-authenticated', uploadWithErrorHandling('attachment'), userAuth, sanitizeInput, validate(schemas.sendAuthenticatedEmail), async (req: any, res: any) => {
+router.post('/send-authenticated', uploadWithErrorHandling('attachments'), userAuth, sanitizeInput, validate(schemas.sendAuthenticatedEmail), async (req: any, res: any) => {
   try {
-    const { message, postId } = req.body;
+    const { message, postId, forceResend } = req.body;
     const userId = req.user.id; // From userAuth middleware
     const userEmail = req.user.email; // From userAuth middleware
-    const file = req.file as Express.Multer.File | undefined;
+    const files = req.files as Express.Multer.File[] | undefined;
 
-    // If attachment provided, moderate it first
-    let attachment: EmailAttachment | undefined;
-    if (file) {
-      console.log('Moderating uploaded image:', { filename: file.originalname, size: file.size, type: file.mimetype });
-      const moderationResult = await moderateImage(file.buffer);
+    // If attachments provided, moderate each one
+    const attachments: EmailAttachment[] = [];
+    if (files && files.length > 0) {
+      for (const file of files) {
+        console.log('Moderating uploaded image:', { filename: file.originalname, size: file.size, type: file.mimetype });
+        const moderationResult = await moderateImage(file.buffer);
 
-      if (!moderationResult.safe) {
-        console.log('Image rejected by moderation:', moderationResult);
-        return res.status(400).json({
-          success: false,
-          message: moderationResult.reason || 'Image failed content moderation.',
+        if (!moderationResult.safe) {
+          console.log('Image rejected by moderation:', moderationResult);
+          return res.status(400).json({
+            success: false,
+            message: `Image "${file.originalname}" failed content moderation: ${moderationResult.reason || 'Inappropriate content detected.'}`,
+          });
+        }
+
+        // Image is safe, add to attachments
+        attachments.push({
+          content: file.buffer.toString('base64'),
+          filename: file.originalname,
+          type: file.mimetype,
+          disposition: 'attachment',
         });
       }
-
-      // Image is safe, prepare attachment
-      attachment = {
-        content: file.buffer.toString('base64'),
-        filename: file.originalname,
-        type: file.mimetype,
-        disposition: 'attachment',
-      };
     }
 
-    // Validate email request
-    const validation = await validateEmailRequest(userEmail, postId, message, userId);
+    // Validate email request (with forceResend option)
+    const validation = await validateEmailRequest(userEmail, postId, message, userId, forceResend);
     if (!validation.valid) {
+      // If it's a duplicate email error, return the history for the frontend to display
+      if (validation.error === 'duplicate_email' && validation.previousEmails) {
+        return res.status(400).json({
+          success: false,
+          message: 'duplicate_email',
+          previousEmails: validation.previousEmails
+        });
+      }
       return res.status(400).json({
         success: false,
         message: validation.error
@@ -274,9 +305,9 @@ router.post('/send-authenticated', uploadWithErrorHandling('attachment'), userAu
         text: tpl.text,
         html: tpl.html,
         replyTo: userEmail,
-        attachments: attachment ? [attachment] : undefined,
+        attachments: attachments.length > 0 ? attachments : undefined,
       });
-      console.log(`Authenticated email successfully sent to ${post[0].email} from ${userEmail} for post ${postId}`, attachment ? '(with attachment)' : '');
+      console.log(`Authenticated email successfully sent to ${post[0].email} from ${userEmail} for post ${postId}`, attachments.length > 0 ? `(with ${attachments.length} attachment(s))` : '');
     } catch (emailError: any) {
       // Log detailed error before re-throwing
       console.error('Failed to send authenticated email via SendGrid:', {

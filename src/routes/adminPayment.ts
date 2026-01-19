@@ -1,7 +1,7 @@
 import express from 'express';
 import { db } from '../db';
 import { paymentConfigs, couponCodes, paymentTransactions, posts } from '../db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, sql } from 'drizzle-orm';
 import { requireSuperadminAuth, requireRole } from '../middleware/adminAuth';
 import { sanitizeInput, validate } from '../middleware/validation';
 import Joi from 'joi';
@@ -153,10 +153,10 @@ router.post('/coupons', requireSuperadminAuth, sanitizeInput, validate(adminPaym
   try {
     const { code, discountPercentage, isActive, usageLimit, expiresAt } = req.body;
 
-    // Check if coupon code already exists
+    // Check if coupon code already exists (case-insensitive)
     const [existingCoupon] = await db.select()
       .from(couponCodes)
-      .where(eq(couponCodes.code, code));
+      .where(sql`LOWER(${couponCodes.code}) = LOWER(${code})`);
 
     if (existingCoupon) {
       return res.status(400).json({ success: false, message: 'Coupon code already exists' });

@@ -37,27 +37,27 @@ export const checkHourlyLimit = async (userId: number): Promise<boolean> => {
       eq(postEmails.userId, userId),
       gte(postEmails.sentAt, oneHourAgo.toISOString())
     ));
-  
+
   return countResult[0].count < 50;
 };
 
 // Check daily limit (150 emails per day) with automatic reset
 export const checkDailyLimit = async (userId: number): Promise<boolean> => {
   const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
-  
+
   // Get or create user limit record
   let userLimit = await db.select().from(userEmailLimits).where(eq(userEmailLimits.userId, userId));
-  
+
   if (!userLimit.length) {
     // First time user
-    await db.insert(userEmailLimits).values({ 
-      userId, 
-      dailyCount: 0, 
-      lastResetDate: today 
+    await db.insert(userEmailLimits).values({
+      userId,
+      dailyCount: 0,
+      lastResetDate: today
     });
     return true;
   }
-  
+
   // Check if we need to reset daily count (automatic reset at midnight)
   if (userLimit[0].lastResetDate !== today) {
     await db.update(userEmailLimits)
@@ -65,7 +65,7 @@ export const checkDailyLimit = async (userId: number): Promise<boolean> => {
       .where(eq(userEmailLimits.userId, userId));
     return true;
   }
-  
+
   return userLimit[0].dailyCount < 150;
 };
 
@@ -78,7 +78,7 @@ export const checkCooldown = async (userId: number): Promise<boolean> => {
       gte(postEmails.sentAt, fifteenSecondsAgo.toISOString())
     ))
     .limit(1);
-  
+
   return recentEmail.length === 0;
 };
 
@@ -91,64 +91,86 @@ export const incrementDailyCount = async (userId: number): Promise<void> => {
 
 // Record email sent (unified for both authenticated and anonymous)
 export const recordEmailSent = async (email: string, postId: number, userId?: number): Promise<void> => {
-  // Check if there's already a record for this email and post
-  const existingRecord = await db.select().from(postEmails)
-    .where(and(eq(postEmails.email, email), eq(postEmails.postId, postId)));
-  
-  if (existingRecord.length > 0) {
-    // Update existing record with user_id if it's null (anonymous -> authenticated)
-    if (!existingRecord[0].userId && userId) {
-      await db.update(postEmails)
-        .set({ userId: userId, sentAt: new Date().toISOString() })
-        .where(eq(postEmails.id, existingRecord[0].id));
-    }
-    // If record already has user_id, do nothing (already recorded)
+  // Always insert new record (allowing multiple emails to same post now)
+  await db.insert(postEmails).values({
+    userId: userId || null,
+    email: email,
+    postId,
+    sentAt: new Date().toISOString()
+  });
+};
+
+// Get email history for a specific post (for duplicate email warning)
+export const getEmailHistory = async (
+  email: string,
+  postId: number,
+  userId?: number
+): Promise<{ sentAt: string }[]> => {
+  if (userId) {
+    // Authenticated user - get by user_id OR by email
+    const history = await db.select({ sentAt: postEmails.sentAt }).from(postEmails)
+      .where(and(
+        eq(postEmails.postId, postId),
+        or(
+          eq(postEmails.userId, userId),
+          eq(postEmails.email, email)
+        )
+      ))
+      .orderBy(postEmails.sentAt);
+    return history;
   } else {
-    // Insert new record
-    await db.insert(postEmails).values({
-      userId: userId || null,
-      email: email,
-      postId,
-      sentAt: new Date().toISOString()
-    });
+    // Anonymous user - check by email
+    const history = await db.select({ sentAt: postEmails.sentAt }).from(postEmails)
+      .where(and(eq(postEmails.email, email), eq(postEmails.postId, postId)))
+      .orderBy(postEmails.sentAt);
+    return history;
   }
 };
 
 // Comprehensive email validation (unified for both authenticated and anonymous)
+// forceResend: if true, skip the duplicate check (user confirmed they want to resend)
 export const validateEmailRequest = async (
   email: string,
-  postId: number, 
+  postId: number,
   message: string,
-  userId?: number
-): Promise<{ valid: boolean; error?: string }> => {
-  
+  userId?: number,
+  forceResend?: boolean
+): Promise<{ valid: boolean; error?: string; previousEmails?: { sentAt: string }[] }> => {
+
   // Check for URLs in message
   if (containsUrl(message)) {
     return { valid: false, error: 'URLs and links are not allowed in messages' };
   }
-  
-  // Check if already sent to this post
-  if (await hasSentEmailToPost(email, postId, userId)) {
-    return { valid: false, error: 'You have already sent an email to this post' };
+
+  // Check if already sent to this post (unless forceResend is true)
+  if (!forceResend) {
+    const history = await getEmailHistory(email, postId, userId);
+    if (history.length > 0) {
+      return {
+        valid: false,
+        error: 'duplicate_email',
+        previousEmails: history
+      };
+    }
   }
-  
+
   // For authenticated users, check rate limits
   if (userId) {
     // Check hourly limit
     if (!(await checkHourlyLimit(userId))) {
       return { valid: false, error: 'Hourly email limit exceeded (50 emails per hour)' };
     }
-    
+
     // Check daily limit
     if (!(await checkDailyLimit(userId))) {
       return { valid: false, error: 'Daily email limit exceeded (150 emails per day)' };
     }
-    
+
     // Check cooldown
     if (!(await checkCooldown(userId))) {
       return { valid: false, error: 'Please wait 15 seconds between emails' };
     }
   }
-  
+
   return { valid: true };
 }; 

@@ -11,14 +11,14 @@ const getVisionClient = () => {
     const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
     return new vision.ImageAnnotatorClient({ credentials });
   }
-  
+
   // If custom path to credentials file is provided via env
   if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     return new vision.ImageAnnotatorClient({
       keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
     });
   }
-  
+
   // Default: use the googlecredential.json in backend folder
   return new vision.ImageAnnotatorClient({
     keyFilename: CREDENTIALS_PATH,
@@ -143,5 +143,5 @@ export function isAllowedImageType(mimetype: string): boolean {
 /**
  * Get max file size in bytes (5MB)
  */
-export const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
+export const MAX_IMAGE_SIZE = 3 * 1024 * 1024; // 3MB
 

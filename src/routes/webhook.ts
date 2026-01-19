@@ -1,7 +1,7 @@
 import express from 'express';
 import { db } from '../db';
 import { paymentTransactions, posts, couponCodes } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import RazorpayService from '../utils/razorpayService';
 import { sendEmail } from '../utils/sendEmail';
 import { tmplPublished } from '../utils/emailTemplates';
@@ -149,15 +149,15 @@ async function handlePaymentLinkPaid(payload: any) {
       })
       .where(eq(posts.id, postId));
 
-    // Update coupon usage count if applicable
+    // Update coupon usage count if applicable (case-insensitive)
     if (post.couponCode) {
-      const [coupon] = await db.select().from(couponCodes).where(eq(couponCodes.code, post.couponCode));
+      const [coupon] = await db.select().from(couponCodes).where(sql`LOWER(${couponCodes.code}) = LOWER(${post.couponCode})`);
       if (coupon) {
         await db.update(couponCodes)
           .set({
             usedCount: (coupon.usedCount || 0) + 1
           })
-          .where(eq(couponCodes.code, post.couponCode));
+          .where(eq(couponCodes.id, coupon.id));
       }
     }
 

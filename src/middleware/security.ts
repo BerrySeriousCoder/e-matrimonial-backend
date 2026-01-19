@@ -119,7 +119,7 @@ export const helmetConfig = helmet({
 // Request size limiter
 export const requestSizeLimiter = (req: Request, res: Response, next: NextFunction) => {
   const contentLength = parseInt(req.headers['content-length'] || '0');
-  const maxSize = 1024 * 1024; // 1MB
+  const maxSize = 15 * 1024 * 1024; // 15MB
 
   if (contentLength > maxSize) {
     return res.status(413).json({
@@ -143,7 +143,7 @@ export const validateEnvironment = () => {
   ];
 
   const missing = requiredEnvVars.filter(envVar => !process.env[envVar]);
-  
+
   if (missing.length > 0) {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
   }
@@ -184,7 +184,7 @@ export const notFoundHandler = (req: Request, res: Response) => {
 // Request logging middleware
 export const requestLogger = (req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();
-  
+
   res.on('finish', () => {
     const duration = Date.now() - start;
     console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`);

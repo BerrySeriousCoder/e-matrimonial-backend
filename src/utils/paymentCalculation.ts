@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { paymentConfigs, couponCodes } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getTextLength } from './htmlUtils';
 
 export interface PaymentCalculation {
@@ -18,6 +18,7 @@ export interface PaymentCalculation {
   finalAmount: number;
   couponCode?: string;
   couponValid?: boolean;
+  config: PaymentConfig;
 }
 
 export interface PaymentConfig {
@@ -110,9 +111,10 @@ export async function calculatePaymentAmount(
   let couponValid = false;
 
   if (couponCode) {
+    // Case-insensitive coupon code lookup
     const [coupon] = await db.select()
       .from(couponCodes)
-      .where(eq(couponCodes.code, couponCode));
+      .where(sql`LOWER(${couponCodes.code}) = LOWER(${couponCode})`);
 
     if (coupon && coupon.isActive) {
       // Check if coupon has expired
@@ -146,6 +148,7 @@ export async function calculatePaymentAmount(
     finalAmount,
     couponCode: couponValid ? couponCode : undefined,
     couponValid,
+    config,
   };
 }
 

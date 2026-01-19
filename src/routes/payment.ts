@@ -1,7 +1,7 @@
 import express from 'express';
 import { db } from '../db';
 import { posts, paymentTransactions, couponCodes } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { calculatePaymentAmount, getPaymentConfig } from '../utils/paymentCalculation';
 import RazorpayService from '../utils/razorpayService';
 import { sanitizeInput, validate } from '../middleware/validation';
@@ -231,15 +231,15 @@ router.post('/verify', sanitizeInput, validate(paymentSchemas.verifyPayment), as
         })
         .where(eq(posts.id, paymentTransaction.postId!));
 
-      // Update coupon usage count if applicable
+      // Update coupon usage count if applicable (case-insensitive)
       if (paymentTransaction.couponCode) {
-        const [coupon] = await db.select().from(couponCodes).where(eq(couponCodes.code, paymentTransaction.couponCode));
+        const [coupon] = await db.select().from(couponCodes).where(sql`LOWER(${couponCodes.code}) = LOWER(${paymentTransaction.couponCode})`);
         if (coupon) {
           await db.update(couponCodes)
             .set({
               usedCount: (coupon.usedCount || 0) + 1
             })
-            .where(eq(couponCodes.code, paymentTransaction.couponCode));
+            .where(eq(couponCodes.id, coupon.id));
         }
       }
     }
