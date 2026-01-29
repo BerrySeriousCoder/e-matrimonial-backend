@@ -6,6 +6,7 @@ import { sendEmail } from '../utils/sendEmail';
 import { tmplOtp } from '../utils/emailTemplates';
 import { validate, sanitizeInput, schemas } from '../middleware/validation';
 import { parseDbTimestampAsUtc } from '../utils/dateUtils';
+import { generateSessionToken } from '../utils/sessionToken';
 
 const router = Router();
 
@@ -96,7 +97,10 @@ router.post('/check', sanitizeInput, validate(schemas.verifyOtp), async (req, re
   }
 
   // Don't delete - just confirm validity
-  res.json({ success: true, message: 'OTP is valid' });
+  // Generate a session token that allows sending emails without re-entering OTP
+  const sessionToken = generateSessionToken(email);
+
+  res.json({ success: true, message: 'OTP is valid', sessionToken });
 });
 
 export default router; 

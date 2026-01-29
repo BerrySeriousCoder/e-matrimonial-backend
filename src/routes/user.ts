@@ -168,6 +168,30 @@ router.post('/verify-login-otp', sanitizeInput, validate(schemas.verifyOtp), asy
   res.json({ success: true, token, email: user[0].email });
 });
 
+// GET /api/user/validate-token
+// Validates if the provided JWT token is still valid
+router.get('/validate-token', async (req: Request, res: Response) => {
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, message: 'No token provided' });
+  }
+
+  try {
+    const token = auth.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; email: string };
+
+    // Verify user still exists in database
+    const user = await db.select().from(users).where(eq(users.email, decoded.email));
+    if (!user.length) {
+      return res.status(401).json({ success: false, message: 'User not found' });
+    }
+
+    res.json({ success: true, email: decoded.email });
+  } catch (error) {
+    res.status(401).json({ success: false, message: 'Invalid or expired token' });
+  }
+});
+
 // Middleware to check JWT
 function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   const auth = req.headers.authorization;

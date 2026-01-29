@@ -75,13 +75,15 @@ export const schemas = {
     'string.textLength': 'Content text length must be between 10 and 1000 characters (currently {{#textLength}})'
   }),
 
-  // Email sending (anonymous users)
+  // Email sending (anonymous users) - accepts either OTP or session token
   sendEmail: Joi.object({
     email: Joi.string().email().required().max(255),
     message: Joi.string().min(1).max(5000).required(),
     postId: Joi.number().integer().positive().required(),
-    otp: Joi.string().length(6).pattern(/^\d{6}$/).required()
-  }),
+    otp: Joi.string().length(6).pattern(/^\d{6}$/),
+    sessionToken: Joi.string().max(500),
+    forceResend: Joi.boolean().optional()
+  }).xor('otp', 'sessionToken'), // Require exactly one of otp or sessionToken
 
   // Authenticated email sending (logged-in users)
   sendAuthenticatedEmail: Joi.object({

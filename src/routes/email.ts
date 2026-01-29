@@ -17,6 +17,7 @@ import { trackEmailEvent } from '../middleware/analytics';
 import { tmplNewMessageToPoster } from '../utils/emailTemplates';
 import { moderateImage, isAllowedImageType, MAX_IMAGE_SIZE } from '../utils/imageModeration';
 import { parseDbTimestampAsUtc } from '../utils/dateUtils';
+import { validateSessionToken } from '../utils/sessionToken';
 
 const router = express.Router();
 
@@ -78,10 +79,10 @@ const uploadWithErrorHandling = (fieldName: string, maxCount: number = 4) => {
   };
 };
 
-// Send email (for anonymous users - requires OTP)
+// Send email (for anonymous users - requires OTP or session token)
 router.post('/send', uploadWithErrorHandling('attachments'), sanitizeInput, validate(schemas.sendEmail), async (req: any, res: any) => {
   try {
-    const { email, message, postId, otp, forceResend } = req.body;
+    const { email, message, postId, otp, sessionToken, forceResend } = req.body;
     const files = req.files as Express.Multer.File[] | undefined;
 
     // If attachments provided, moderate each one
@@ -109,21 +110,39 @@ router.post('/send', uploadWithErrorHandling('attachments'), sanitizeInput, vali
       }
     }
 
-    // Verify OTP
-    const otpRecords = await db.select().from(otps)
-      .where(and(
-        eq(otps.email, email),
-        eq(otps.otp, otp)
-      ));
+    // Verify authentication: either session token or OTP
+    if (sessionToken) {
+      // Validate session token (from previous OTP verification)
+      const isValidSession = validateSessionToken(sessionToken, email);
+      if (!isValidSession) {
+        return res.status(400).json({
+          success: false,
+          message: 'Session expired. Please verify your email again.'
+        });
+      }
+      console.log(`Session token verified for ${email}`);
+    } else if (otp) {
+      // Traditional OTP verification
+      const otpRecords = await db.select().from(otps)
+        .where(and(
+          eq(otps.email, email),
+          eq(otps.otp, otp)
+        ));
 
-    // Filter for non-expired OTPs using proper Date comparison
-    const now = new Date();
-    const validOtp = otpRecords.find(r => parseDbTimestampAsUtc(r.expiresAt) > now);
+      // Filter for non-expired OTPs using proper Date comparison
+      const now = new Date();
+      const validOtp = otpRecords.find(r => parseDbTimestampAsUtc(r.expiresAt) > now);
 
-    if (!validOtp) {
+      if (!validOtp) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid or expired OTP'
+        });
+      }
+    } else {
       return res.status(400).json({
         success: false,
-        message: 'Invalid or expired OTP'
+        message: 'Authentication required (OTP or session token)'
       });
     }
 
