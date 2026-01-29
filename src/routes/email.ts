@@ -175,6 +175,7 @@ router.post('/send', uploadWithErrorHandling('attachments'), sanitizeInput, vali
         html,
         replyTo: email,
         attachments: attachments.length > 0 ? attachments : undefined,
+        disableUnsubscribe: true,
       });
       console.log(`Email successfully sent to ${post[0].email} from ${email} for post ${postId}`, attachments.length > 0 ? `(with ${attachments.length} attachment(s))` : '');
     } catch (emailError: any) {
@@ -306,6 +307,7 @@ router.post('/send-authenticated', uploadWithErrorHandling('attachments'), userA
         html: tpl.html,
         replyTo: userEmail,
         attachments: attachments.length > 0 ? attachments : undefined,
+        disableUnsubscribe: true,
       });
       console.log(`Authenticated email successfully sent to ${post[0].email} from ${userEmail} for post ${postId}`, attachments.length > 0 ? `(with ${attachments.length} attachment(s))` : '');
     } catch (emailError: any) {
