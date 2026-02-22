@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { eq, and, desc, like, sql } from 'drizzle-orm';
 import { db } from '../db';
-import { admins, posts, users, adminLogs } from '../db/schema';
+import { admins, posts, users, adminLogs, postEmails, emailUnsubscribes } from '../db/schema';
 import { requireAdminAuth, requireSuperadminAuth, AdminRequest, isSuperadmin } from '../middleware/adminAuth';
 import { logAdminAction } from '../utils/adminLogger';
 import { validate, sanitizeInput, validateQuery, schemas } from '../middleware/validation';
@@ -95,6 +95,48 @@ router.get('/profile', requireAdminAuth, async (req: AdminRequest, res) => {
   }
 });
 
+// Dashboard Stats
+router.get('/dashboard-stats', requireAdminAuth, async (req: AdminRequest, res) => {
+  try {
+    const [totalPostsResult, publishedPostsResult, unpublishedValidResult, totalUsersResult, uniqueEmailIdsResult, uniqueSendersResult, totalEmailsSentResult, uniqueRecipientsResult, unsubscribedResult] = await Promise.all([
+      db.select({ count: sql<number>`count(*)::int` }).from(posts),
+      db.select({ count: sql<number>`count(*)::int` }).from(posts)
+        .where(and(
+          eq(posts.status, 'published'),
+          sql`${posts.expiresAt} > now()`
+        )),
+      db.select({ count: sql<number>`count(*)::int` }).from(posts)
+        .where(sql`${posts.status} IN ('pending', 'edited', 'payment_pending')`),
+      db.select({ count: sql<number>`count(*)::int` }).from(users),
+      db.select({ count: sql<number>`count(distinct ${posts.email})::int` }).from(posts),
+      // Unique people who sent emails (by email, since userId can be null for anonymous)
+      db.select({ count: sql<number>`count(distinct ${postEmails.email})::int` }).from(postEmails),
+      db.select({ count: sql<number>`count(*)::int` }).from(postEmails),
+      db.select({ count: sql<number>`count(distinct ${postEmails.postId})::int` }).from(postEmails),
+      // Unsubscribed emails
+      db.select({ count: sql<number>`count(*)::int` }).from(emailUnsubscribes),
+    ]);
+
+    res.json({
+      success: true,
+      stats: {
+        totalPosts: totalPostsResult[0]?.count || 0,
+        publishedPosts: publishedPostsResult[0]?.count || 0,
+        unpublishedValidPosts: unpublishedValidResult[0]?.count || 0,
+        totalUsers: totalUsersResult[0]?.count || 0,
+        uniqueEmailIds: uniqueEmailIdsResult[0]?.count || 0,
+        uniqueSenders: uniqueSendersResult[0]?.count || 0,
+        totalEmailsSent: totalEmailsSentResult[0]?.count || 0,
+        uniqueRecipients: uniqueRecipientsResult[0]?.count || 0,
+        unsubscribedEmails: unsubscribedResult[0]?.count || 0,
+      }
+    });
+  } catch (error) {
+    console.error('Dashboard stats error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch dashboard stats' });
+  }
+});
+
 // Get All Posts (Admin)
 router.get('/posts', requireAdminAuth, validateQuery(schemas.adminPostsQuery), async (req: AdminRequest, res) => {
   const { status, search, page = 1 } = req.query;
@@ -138,6 +180,47 @@ router.get('/posts', requireAdminAuth, validateQuery(schemas.adminPostsQuery), a
   }
 });
 
+// Admin Edit Post Content (superadmin only)
+router.put('/posts/:id/edit', requireSuperadminAuth, sanitizeInput, validate(schemas.updateAdminPost), async (req: AdminRequest, res) => {
+  const { id } = req.params;
+
+  try {
+    const [currentPost] = await db.select().from(posts).where(eq(posts.id, Number(id)));
+    if (!currentPost) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
+    const updateData: any = {};
+    if (req.body.content !== undefined) updateData.content = req.body.content;
+    if (req.body.lookingFor !== undefined) updateData.lookingFor = req.body.lookingFor;
+    if (req.body.fontSize !== undefined) updateData.fontSize = req.body.fontSize;
+    if (req.body.bgColor !== undefined) updateData.bgColor = req.body.bgColor;
+    if (req.body.icon !== undefined) updateData.icon = req.body.icon;
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ success: false, message: 'No fields to update' });
+    }
+
+    const [updatedPost] = await db.update(posts)
+      .set(updateData)
+      .where(eq(posts.id, Number(id)))
+      .returning();
+
+    // Log the admin action
+    await logAdminAction(req, {
+      action: 'edit_post',
+      entityType: 'post',
+      entityId: Number(id),
+      details: `Edited post #${id}`,
+    });
+
+    res.json({ success: true, message: 'Post updated successfully', post: updatedPost });
+  } catch (error) {
+    console.error('Admin edit post error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
 // Update Post Status
 router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res) => {
   const { id } = req.params;
@@ -170,6 +253,7 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
       const duration = currentPost.duration || 14; // Default to 14 days if not set
       expiresAt.setDate(expiresAt.getDate() + duration);
       updateData.expiresAt = expiresAt.toISOString();
+      updateData.publishedAt = new Date().toISOString();
     } else if (status === 'payment_pending') {
       // Calculate payment amount and create payment link
       try {
@@ -390,7 +474,8 @@ router.post('/posts', requireAdminAuth, sanitizeInput, validate(schemas.createAd
         bgColor: bgColor || null,
         icon: icon || null,
         couponCode: couponCode || null,
-        status: 'published' // Admin created posts are published directly
+        status: 'published', // Admin created posts are published directly
+        publishedAt: new Date().toISOString()
       })
       .returning();
 

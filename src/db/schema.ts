@@ -90,6 +90,7 @@ export const posts = pgTable("posts", {
 	baseAmount: integer("base_amount"),
 	finalAmount: integer("final_amount"),
 	couponCode: varchar("coupon_code", { length: 50 }),
+	publishedAt: timestamp("published_at", { mode: 'string' }),
 }, (table) => [
 	foreignKey({
 		columns: [table.userId],
@@ -288,4 +289,14 @@ export const searchSynonymWords = pgTable("search_synonym_words", {
 	}).onDelete("cascade"),
 	unique("search_synonym_words_word_unique").on(table.word),
 	index("idx_search_synonym_words_word").using("btree", table.word.asc().nullsLast().op("text_ops")),
+]);
+
+export const emailUnsubscribes = pgTable("email_unsubscribes", {
+	id: serial().primaryKey().notNull(),
+	email: varchar({ length: 255 }).notNull(),
+	unsubscribedAt: timestamp("unsubscribed_at", { mode: 'string' }).defaultNow().notNull(),
+	reason: varchar({ length: 255 }),
+}, (table) => [
+	unique("email_unsubscribes_email_unique").on(table.email),
+	index("idx_email_unsubscribes_email").using("btree", table.email.asc().nullsLast().op("text_ops")),
 ]);

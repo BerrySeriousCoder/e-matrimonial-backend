@@ -136,7 +136,7 @@ export const validateEnvironment = () => {
   const requiredEnvVars = [
     'JWT_SECRET',
     'DATABASE_URL',
-    'SENDGRID_API_KEY',
+    'RESEND_API_KEY',
     'SUPERADMIN_EMAIL',
     'RAZORPAY_KEY_ID',
     'RAZORPAY_SECRET'

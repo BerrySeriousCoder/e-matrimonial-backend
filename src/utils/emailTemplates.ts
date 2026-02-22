@@ -1,9 +1,14 @@
-export function brandWrapper(subject: string, bodyHtml: string, bodyText: string, showUnsubscribe: boolean = true) {
+import { generateUnsubscribeUrl } from './sendEmail';
+
+export function brandWrapper(subject: string, bodyHtml: string, bodyText: string, showUnsubscribe: boolean = true, unsubscribeUrl?: string) {
   const unsubscribeFooter = showUnsubscribe ? `
           <tr>
             <td style="padding:16px 24px;border-top:1px solid #eef2f7;color:#475467;font-size:12px;">
               <div>You're receiving this email from E‑Matrimonials.</div>
-              <div style="margin-top:6px;">To stop receiving these, use the Unsubscribe link below.</div>
+              <div style="margin-top:6px;">${unsubscribeUrl
+      ? `<a href="${unsubscribeUrl}" style="color:#6366f1;text-decoration:underline;">Unsubscribe</a> from these emails.`
+      : 'To stop receiving these, use the Unsubscribe link below.'
+    }</div>
             </td>
           </tr>` : '';
   const html = `
@@ -27,7 +32,9 @@ export function brandWrapper(subject: string, bodyHtml: string, bodyText: string
       </td>
     </tr>
   </table>`;
-  const unsubscribeText = showUnsubscribe ? `\n\nUnsubscribe available via your email provider's unsubscribe button.` : '';
+  const unsubscribeText = showUnsubscribe
+    ? (unsubscribeUrl ? `\n\nUnsubscribe: ${unsubscribeUrl}` : `\n\nUnsubscribe available via your email provider's unsubscribe button.`)
+    : '';
   const text = `E-Matrimonials\n${subject}\n\n${bodyText}${unsubscribeText}`;
   return { html, text };
 }
@@ -86,7 +93,7 @@ We received a matrimonial advertisement request submitted on your behalf.
 ${params.lookingFor ? `I am looking for: ${params.lookingFor}\n` : ''}Preview: ${excerpt}${params.content.length > 140 ? '…' : ''}
 Status: Pending admin approval.
 You will receive another email once your ad is published.`;
-  return brandWrapper(subject, bodyHtml, bodyText);
+  return brandWrapper(subject, bodyHtml, bodyText, true, generateUnsubscribeUrl(params.email));
 }
 
 export function tmplClientSubmitted(params: { email: string; content: string; lookingFor?: string }) {
@@ -114,13 +121,13 @@ export function tmplPublished(params: { email: string; expiresAt?: Date; postId?
   const subject = 'Your ad has been published';
   const siteUrl = process.env.CLIENT_BASE_URL || process.env.FRONTEND_URL || 'https://e-matrimonials.com';
   const viewAdUrl = params.postId ? `${siteUrl}/?highlight=${params.postId}` : siteUrl;
-  
+
   // Strip HTML tags and truncate content for preview
-  const contentPreview = params.content 
+  const contentPreview = params.content
     ? params.content.replace(/<[^>]*>/g, '').slice(0, 200) + (params.content.length > 200 ? '…' : '')
     : '';
   const safePreview = contentPreview.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  
+
   const bodyHtml = `
     <p>Hello ${params.email},</p>
     <p style="font-size:18px;color:#059669;font-weight:600;margin:16px 0;">🎉 Good news! Your matrimonial advertisement is now live!</p>
@@ -206,7 +213,7 @@ export function tmplNewMessageToPoster(params: {
     <p style="margin-top:12px;color:#475467;">Reply directly to this email to respond.</p>
   `;
   const bodyText = `You received a new message for your "${params.lookingFor}" post\n\nPost Preview: "${params.contentPreview}"\n\n${plainTextMessage}\n\nReply directly to this email to respond.`;
-  return brandWrapper(subject, bodyHtml, bodyText);
+  return brandWrapper(subject, bodyHtml, bodyText, true, generateUnsubscribeUrl(params.toEmail));
 }
 
 export function tmplPostArchived(params: { email: string; contentPreview: string; reason?: string }) {

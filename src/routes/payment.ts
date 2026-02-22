@@ -228,6 +228,7 @@ router.post('/verify', sanitizeInput, validate(paymentSchemas.verifyPayment), as
           paymentTransactionId: paymentTransaction.id,
           baseAmount: paymentTransaction.amount,
           finalAmount: paymentTransaction.finalAmount,
+          publishedAt: new Date().toISOString(),
         })
         .where(eq(posts.id, paymentTransaction.postId!));
 

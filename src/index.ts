@@ -15,6 +15,7 @@ import paymentRouter from './routes/payment';
 import adminPaymentRouter from './routes/adminPayment';
 import webhookRouter from './routes/webhook';
 import analyticsRouter from './routes/analytics';
+import unsubscribeRouter from './routes/unsubscribe';
 
 // Security imports
 import {
@@ -53,6 +54,9 @@ app.use(cors());
 
 // Webhook routes (must be before JSON parsing)
 app.use('/api/webhook', webhookRouter);
+
+// Unsubscribe route (no rate limiting — must always work)
+app.use('/api/unsubscribe', unsubscribeRouter);
 
 // Body parser with limits
 app.use(express.json({ limit: '10mb' }));

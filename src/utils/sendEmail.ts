@@ -1,14 +1,33 @@
-import sgMail from '@sendgrid/mail';
+import { Resend } from 'resend';
+import jwt from 'jsonwebtoken';
+import { eq } from 'drizzle-orm';
+import { db } from '../db';
+import { emailUnsubscribes } from '../db/schema';
 
-sgMail.setApiKey(process.env.SENDGRID_API_KEY!);
+const resend = new Resend(process.env.RESEND_API_KEY!);
 
-// SendGrid attachment format
+// Attachment format (compatible with Resend)
 export interface EmailAttachment {
   content: string; // Base64 encoded content
   filename: string;
   type: string; // MIME type
   disposition?: 'attachment' | 'inline';
   contentId?: string; // For inline images
+}
+
+// Check if an email is unsubscribed
+async function isUnsubscribed(email: string): Promise<boolean> {
+  const result = await db.select().from(emailUnsubscribes).where(eq(emailUnsubscribes.email, email));
+  return result.length > 0;
+}
+
+// Generate a signed unsubscribe URL for a given email
+function generateUnsubscribeUrl(email: string): string {
+  const token = jwt.sign({ email }, process.env.JWT_SECRET!, { expiresIn: '90d' });
+  const baseUrl = process.env.CLIENT_BASE_URL || 'http://localhost:4000';
+  // Point to backend API, not frontend
+  const backendUrl = baseUrl.replace(':3000', ':4000');
+  return `${backendUrl}/api/unsubscribe?token=${token}`;
 }
 
 export async function sendEmail({
@@ -32,98 +51,92 @@ export async function sendEmail({
   disableUnsubscribe?: boolean;
   attachments?: EmailAttachment[];
 }) {
-  const msg: any = {
-    to,
-    from: from || process.env.SENDGRID_FROM_EMAIL!,
-    subject,
-    text,
-    html,
-    // Enable/disable SendGrid Subscription Tracking and ASM per email
-    asm: !disableUnsubscribe && process.env.SENDGRID_UNSUB_GROUP_ID ? { groupId: Number(process.env.SENDGRID_UNSUB_GROUP_ID) } : undefined,
-    trackingSettings: disableUnsubscribe ? { subscriptionTracking: { enable: false } } : { subscriptionTracking: { enable: true } },
-    mailSettings: {
-      sandboxMode: { enable: false },
-    },
-  };
-  if (replyTo) msg.replyTo = replyTo;
-  if (attachments && attachments.length > 0) {
-    msg.attachments = attachments.map(att => ({
-      content: att.content,
-      filename: att.filename,
-      type: att.type,
-      disposition: att.disposition || 'attachment',
-      ...(att.contentId ? { content_id: att.contentId } : {}),
-    }));
+  // Validate environment variables
+  if (!process.env.RESEND_API_KEY) {
+    const error = new Error('RESEND_API_KEY is not configured');
+    console.error('Resend configuration error:', error.message);
+    throw error;
   }
-  // Add List-Unsubscribe headers for native Gmail/Outlook UI
-  // Prefer SendGrid-hosted unsubscribe (provided when Subscription Tracking is enabled)
-  // If caller provides a fallback unsubscribeUrl, include it as well.
+  if (!process.env.RESEND_FROM_EMAIL && !from) {
+    const error = new Error('RESEND_FROM_EMAIL is not configured and no from address provided');
+    console.error('Resend configuration error:', error.message);
+    throw error;
+  }
+
+  // Suppression check: skip sending if recipient has unsubscribed (only for non-transactional emails)
   if (!disableUnsubscribe) {
-    const headers: Record<string, string> = {};
-    headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
-    if (unsubscribeUrl) {
-      headers['List-Unsubscribe'] = `<${unsubscribeUrl}>`;
-    }
-    if (Object.keys(headers).length > 0) {
-      msg.headers = { ...(msg.headers || {}), ...headers };
+    const unsubscribed = await isUnsubscribed(to);
+    if (unsubscribed) {
+      console.log(`Email suppressed (unsubscribed): ${to}, subject: ${subject}`);
+      return { data: null, error: null, suppressed: true };
     }
   }
 
-  // Validate environment variables
-  if (!process.env.SENDGRID_API_KEY) {
-    const error = new Error('SENDGRID_API_KEY is not configured');
-    console.error('SendGrid configuration error:', error.message);
-    throw error;
+  // Build headers — auto-generate unsubscribe URL if not provided
+  const headers: Record<string, string> = {};
+  if (!disableUnsubscribe) {
+    const autoUnsubUrl = unsubscribeUrl || generateUnsubscribeUrl(to);
+    headers['List-Unsubscribe'] = `<${autoUnsubUrl}>`;
+    headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
   }
-  if (!process.env.SENDGRID_FROM_EMAIL && !from) {
-    const error = new Error('SENDGRID_FROM_EMAIL is not configured and no from address provided');
-    console.error('SendGrid configuration error:', error.message);
-    throw error;
-  }
+
+  // Build attachments for Resend format
+  const resendAttachments = attachments?.map(att => ({
+    content: Buffer.from(att.content, 'base64'),
+    filename: att.filename,
+  }));
 
   try {
-    console.log('Attempting to send email via SendGrid:', {
+    console.log('Attempting to send email via Resend:', {
       to,
-      from: msg.from,
+      from: from || process.env.RESEND_FROM_EMAIL,
       subject,
       hasHtml: !!html,
       hasText: !!text,
-      replyTo: msg.replyTo,
+      replyTo,
       attachmentCount: attachments?.length || 0,
     });
 
-    const result = await sgMail.send(msg);
-    console.log('SendGrid email sent successfully:', {
+    const result = await resend.emails.send({
+      from: from || process.env.RESEND_FROM_EMAIL!,
       to,
       subject,
-      statusCode: result[0]?.statusCode,
-      headers: result[0]?.headers
+      text,
+      html: html || undefined,
+      replyTo: replyTo || undefined,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
+      attachments: resendAttachments && resendAttachments.length > 0 ? resendAttachments : undefined,
+    });
+
+    if (result.error) {
+      console.error('Resend send error:', {
+        error: result.error,
+        emailDetails: { to, from: from || process.env.RESEND_FROM_EMAIL, subject, replyTo },
+      });
+      throw new Error(result.error.message);
+    }
+
+    console.log('Resend email sent successfully:', {
+      to,
+      subject,
+      id: result.data?.id,
     });
     return result;
   } catch (error: any) {
-    // Log detailed SendGrid error information
-    console.error('SendGrid send error:', {
+    console.error('Resend send error:', {
       message: error?.message,
-      code: error?.code,
-      statusCode: error?.response?.statusCode,
-      body: error?.response?.body,
-      headers: error?.response?.headers,
+      name: error?.name,
+      statusCode: error?.statusCode,
       emailDetails: {
         to,
-        from: msg.from,
+        from: from || process.env.RESEND_FROM_EMAIL,
         subject,
-        replyTo: msg.replyTo
-      }
+        replyTo,
+      },
     });
-
-    // If SendGrid provides error details, include them
-    if (error?.response?.body) {
-      const errorDetails = typeof error.response.body === 'string' 
-        ? error.response.body 
-        : JSON.stringify(error.response.body);
-      console.error('SendGrid error details:', errorDetails);
-    }
-
     throw error;
   }
-} 
+}
+
+// Export for use in templates
+export { generateUnsubscribeUrl };

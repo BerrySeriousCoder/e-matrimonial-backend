@@ -194,19 +194,18 @@ router.post('/send', uploadWithErrorHandling('attachments'), sanitizeInput, vali
         html,
         replyTo: email,
         attachments: attachments.length > 0 ? attachments : undefined,
-        disableUnsubscribe: true,
       });
       console.log(`Email successfully sent to ${post[0].email} from ${email} for post ${postId}`, attachments.length > 0 ? `(with ${attachments.length} attachment(s))` : '');
     } catch (emailError: any) {
       // Log detailed error before re-throwing
-      console.error('Failed to send email via SendGrid:', {
+      console.error('Failed to send email via Resend:', {
         error: emailError?.message,
         code: emailError?.code,
         statusCode: emailError?.response?.statusCode,
         to: post[0].email,
         from: email,
         postId,
-        sendGridError: emailError?.response?.body
+        resendError: emailError?.message
       });
       throw emailError; // Re-throw to be caught by outer catch
     }
@@ -326,12 +325,11 @@ router.post('/send-authenticated', uploadWithErrorHandling('attachments'), userA
         html: tpl.html,
         replyTo: userEmail,
         attachments: attachments.length > 0 ? attachments : undefined,
-        disableUnsubscribe: true,
       });
       console.log(`Authenticated email successfully sent to ${post[0].email} from ${userEmail} for post ${postId}`, attachments.length > 0 ? `(with ${attachments.length} attachment(s))` : '');
     } catch (emailError: any) {
       // Log detailed error before re-throwing
-      console.error('Failed to send authenticated email via SendGrid:', {
+      console.error('Failed to send authenticated email via Resend:', {
         error: emailError?.message,
         code: emailError?.code,
         statusCode: emailError?.response?.statusCode,
@@ -339,7 +337,7 @@ router.post('/send-authenticated', uploadWithErrorHandling('attachments'), userA
         from: userEmail,
         postId,
         userId,
-        sendGridError: emailError?.response?.body
+        resendError: emailError?.message
       });
       throw emailError; // Re-throw to be caught by outer catch
     }
