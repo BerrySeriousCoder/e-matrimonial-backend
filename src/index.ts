@@ -40,6 +40,7 @@ try {
 }
 
 const app = express();
+app.set('trust proxy', 1); // Trust first proxy (Render)
 const PORT = process.env.PORT || 4000;
 
 // Security middleware (order matters!)
