@@ -24,7 +24,14 @@ router.post('/request', sanitizeInput, validate(schemas.requestOtp), async (req,
   // Send OTP via email
   try {
     const { html, text } = tmplOtp({ otp });
-    await sendEmail({ to: email, subject: `Your OTP: ${otp} - E‑Matrimonial`, text, html, disableUnsubscribe: true });
+    await sendEmail({
+      to: email,
+      subject: `Your OTP: ${otp} - E‑Matrimonial`,
+      text,
+      html,
+      disableUnsubscribe: true,
+      logMetadata: { senderEmail: 'system', emailType: 'otp' },
+    });
     res.json({ success: true, message: 'OTP sent' });
   } catch (e) {
     res.status(500).json({ success: false, message: 'Failed to send OTP' });

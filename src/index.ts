@@ -15,6 +15,7 @@ import paymentRouter from './routes/payment';
 import adminPaymentRouter from './routes/adminPayment';
 import webhookRouter from './routes/webhook';
 import analyticsRouter from './routes/analytics';
+import emailAuditRouter from './routes/emailAudit';
 import unsubscribeRouter from './routes/unsubscribe';
 
 // Security imports
@@ -123,6 +124,9 @@ app.use('/api/admin/payment', ADM, adminPaymentRouter);
 
 // Analytics routes
 app.use('/api/analytics', ADM, analyticsRouter);
+
+// Email audit routes
+app.use('/api/admin/email-audit', ADM, emailAuditRouter);
 
 // Apply specific rate limiting to post creation
 app.use('/api/posts', PL);

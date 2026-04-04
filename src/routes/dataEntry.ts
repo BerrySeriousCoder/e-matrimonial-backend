@@ -75,7 +75,13 @@ router.post('/posts', requireRole(['data_entry']), sanitizeInput, validate(schem
     // Fire-and-forget email to customer
     try {
       const { html, text } = tmplDataEntrySubmitted({ email, content, lookingFor });
-      sendEmail({ to: email, subject: '[E‑Matrimonials] Ad submitted on your behalf', text, html });
+      sendEmail({
+        to: email,
+        subject: '[E‑Matrimonials] Ad submitted on your behalf',
+        text,
+        html,
+        logMetadata: { senderEmail: 'system', emailType: 'notification' },
+      });
     } catch (e) {
       console.error('DataEntry submit email error:', e);
     }
@@ -102,6 +108,10 @@ router.put('/posts/:id', requireRole(['data_entry']), sanitizeInput, validate(sc
     const [existing] = await db.select().from(posts).where(eq(posts.id, Number(id)));
     if (!existing || existing.createdByAdminId !== req.admin!.adminId) {
       return res.status(403).json({ success: false, message: 'Not authorized to edit this post' });
+    }
+
+    if (existing.status === 'deleted') {
+      return res.status(400).json({ success: false, message: 'Deleted posts cannot be edited' });
     }
 
     const updateData: any = { ...req.body, status: 'edited' };

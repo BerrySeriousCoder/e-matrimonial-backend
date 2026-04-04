@@ -91,6 +91,7 @@ export const posts = pgTable("posts", {
 	finalAmount: integer("final_amount"),
 	couponCode: varchar("coupon_code", { length: 50 }),
 	publishedAt: timestamp("published_at", { mode: 'string' }),
+	previousPostId: integer("previous_post_id"),
 }, (table) => [
 	foreignKey({
 		columns: [table.userId],
@@ -102,6 +103,12 @@ export const posts = pgTable("posts", {
 		foreignColumns: [paymentTransactions.id],
 		name: "posts_payment_transaction_id_fkey"
 	}),
+	foreignKey({
+		columns: [table.previousPostId],
+		foreignColumns: [table.id],
+		name: "posts_previous_post_id_fkey"
+	}),
+	index("idx_posts_previous_post_id").on(table.previousPostId),
 ]);
 
 export const postEmails = pgTable("post_emails", {
@@ -289,6 +296,30 @@ export const searchSynonymWords = pgTable("search_synonym_words", {
 	}).onDelete("cascade"),
 	unique("search_synonym_words_word_unique").on(table.word),
 	index("idx_search_synonym_words_word").using("btree", table.word.asc().nullsLast().op("text_ops")),
+]);
+
+export const emailLogs = pgTable("email_logs", {
+	id: serial().primaryKey().notNull(),
+	senderEmail: varchar("sender_email", { length: 255 }).notNull(),
+	recipientEmail: varchar("recipient_email", { length: 255 }).notNull(),
+	postId: integer("post_id"),
+	userId: integer("user_id"),
+	subject: text().notNull(),
+	messageText: text("message_text"),
+	messageHtml: text("message_html"),
+	emailType: varchar("email_type", { length: 50 }).notNull(),
+	attachments: jsonb(),
+	resendMessageId: varchar("resend_message_id", { length: 255 }),
+	status: varchar({ length: 20 }).notNull().default('sent'),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	index("idx_email_logs_sender").on(table.senderEmail),
+	index("idx_email_logs_recipient").on(table.recipientEmail),
+	index("idx_email_logs_post_id").on(table.postId),
+	index("idx_email_logs_created_at").on(table.createdAt),
+	index("idx_email_logs_email_type").on(table.emailType),
+	foreignKey({ columns: [table.postId], foreignColumns: [posts.id], name: "email_logs_post_id_fk" }),
+	foreignKey({ columns: [table.userId], foreignColumns: [users.id], name: "email_logs_user_id_fk" }),
 ]);
 
 export const emailUnsubscribes = pgTable("email_unsubscribes", {

@@ -192,7 +192,8 @@ async function handlePaymentLinkPaid(payload: any) {
         subject: '[E‑Matrimonials] Your ad is now live!', 
         text, 
         html,
-        disableUnsubscribe: true
+        disableUnsubscribe: true,
+        logMetadata: { senderEmail: 'system', postId, emailType: 'payment' },
       });
       console.log('✅ "Ad is live" email sent successfully to:', post.email);
     } catch (emailError) {

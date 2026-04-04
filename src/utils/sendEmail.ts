@@ -2,7 +2,7 @@ import { Resend } from 'resend';
 import jwt from 'jsonwebtoken';
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
-import { emailUnsubscribes } from '../db/schema';
+import { emailUnsubscribes, emailLogs } from '../db/schema';
 
 const resend = new Resend(process.env.RESEND_API_KEY!);
 
@@ -15,6 +15,15 @@ export interface EmailAttachment {
   contentId?: string; // For inline images
 }
 
+export interface EmailLogMetadata {
+  senderEmail: string;
+  postId?: number;
+  userId?: number;
+  emailType: string;
+  userMessage?: string;
+  attachmentMeta?: { key: string; filename: string; mimeType: string; sizeBytes: number }[];
+}
+
 // Check if an email is unsubscribed
 async function isUnsubscribed(email: string): Promise<boolean> {
   const result = await db.select().from(emailUnsubscribes).where(eq(emailUnsubscribes.email, email));
@@ -25,9 +34,41 @@ async function isUnsubscribed(email: string): Promise<boolean> {
 function generateUnsubscribeUrl(email: string): string {
   const token = jwt.sign({ email }, process.env.JWT_SECRET!, { expiresIn: '90d' });
   const baseUrl = process.env.CLIENT_BASE_URL || 'http://localhost:4000';
-  // Point to backend API, not frontend
   const backendUrl = baseUrl.replace(':3000', ':4000');
   return `${backendUrl}/api/unsubscribe?token=${token}`;
+}
+
+async function logEmailTransaction(params: {
+  senderEmail: string;
+  recipientEmail: string;
+  subject: string;
+  messageText?: string;
+  messageHtml?: string;
+  emailType: string;
+  postId?: number;
+  userId?: number;
+  attachments?: { key: string; filename: string; mimeType: string; sizeBytes: number }[];
+  resendMessageId?: string;
+  status: string;
+}): Promise<void> {
+  try {
+    await db.insert(emailLogs).values({
+      senderEmail: params.senderEmail,
+      recipientEmail: params.recipientEmail,
+      subject: params.subject,
+      messageText: params.messageText || null,
+      messageHtml: params.messageHtml || null,
+      emailType: params.emailType,
+      postId: params.postId || null,
+      userId: params.userId || null,
+      attachments: params.attachments && params.attachments.length > 0 ? params.attachments : null,
+      resendMessageId: params.resendMessageId || null,
+      status: params.status,
+      createdAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Failed to log email transaction:', err);
+  }
 }
 
 export async function sendEmail({
@@ -40,6 +81,7 @@ export async function sendEmail({
   unsubscribeUrl,
   disableUnsubscribe,
   attachments,
+  logMetadata,
 }: {
   to: string;
   from?: string;
@@ -50,8 +92,8 @@ export async function sendEmail({
   unsubscribeUrl?: string;
   disableUnsubscribe?: boolean;
   attachments?: EmailAttachment[];
+  logMetadata?: EmailLogMetadata;
 }) {
-  // Validate environment variables
   if (!process.env.RESEND_API_KEY) {
     const error = new Error('RESEND_API_KEY is not configured');
     console.error('Resend configuration error:', error.message);
@@ -68,6 +110,22 @@ export async function sendEmail({
     const unsubscribed = await isUnsubscribed(to);
     if (unsubscribed) {
       console.log(`Email suppressed (unsubscribed): ${to}, subject: ${subject}`);
+
+      if (logMetadata) {
+        await logEmailTransaction({
+          senderEmail: logMetadata.senderEmail,
+          recipientEmail: to,
+          subject,
+          messageText: logMetadata.userMessage || text,
+          messageHtml: html,
+          emailType: logMetadata.emailType,
+          postId: logMetadata.postId,
+          userId: logMetadata.userId,
+          attachments: logMetadata.attachmentMeta,
+          status: 'suppressed',
+        });
+      }
+
       return { data: null, error: null, suppressed: true };
     }
   }
@@ -113,6 +171,22 @@ export async function sendEmail({
         error: result.error,
         emailDetails: { to, from: from || process.env.RESEND_FROM_EMAIL, subject, replyTo },
       });
+
+      if (logMetadata) {
+        await logEmailTransaction({
+          senderEmail: logMetadata.senderEmail,
+          recipientEmail: to,
+          subject,
+          messageText: logMetadata.userMessage || text,
+          messageHtml: html,
+          emailType: logMetadata.emailType,
+          postId: logMetadata.postId,
+          userId: logMetadata.userId,
+          attachments: logMetadata.attachmentMeta,
+          status: 'failed',
+        });
+      }
+
       throw new Error(result.error.message);
     }
 
@@ -121,6 +195,23 @@ export async function sendEmail({
       subject,
       id: result.data?.id,
     });
+
+    if (logMetadata) {
+      await logEmailTransaction({
+        senderEmail: logMetadata.senderEmail,
+        recipientEmail: to,
+        subject,
+        messageText: logMetadata.userMessage || text,
+        messageHtml: html,
+        emailType: logMetadata.emailType,
+        postId: logMetadata.postId,
+        userId: logMetadata.userId,
+        attachments: logMetadata.attachmentMeta,
+        resendMessageId: result.data?.id,
+        status: 'sent',
+      });
+    }
+
     return result;
   } catch (error: any) {
     console.error('Resend send error:', {
@@ -134,9 +225,24 @@ export async function sendEmail({
         replyTo,
       },
     });
+
+    if (logMetadata && error?.message !== 'RESEND_API_KEY is not configured') {
+      await logEmailTransaction({
+        senderEmail: logMetadata.senderEmail,
+        recipientEmail: to,
+        subject,
+        messageText: logMetadata.userMessage || text,
+        messageHtml: html,
+        emailType: logMetadata.emailType,
+        postId: logMetadata.postId,
+        userId: logMetadata.userId,
+        attachments: logMetadata.attachmentMeta,
+        status: 'failed',
+      });
+    }
+
     throw error;
   }
 }
 
-// Export for use in templates
 export { generateUnsubscribeUrl };

@@ -275,7 +275,14 @@ router.post('/', sanitizeInput, validate(schemas.createPost), async (req, res) =
   // Email confirmation to user
   try {
     const { html, text } = tmplClientSubmitted({ email, content, lookingFor });
-    sendEmail({ to: email, subject: '[E‑Matrimonials] Your ad request was submitted', text, html, disableUnsubscribe: true });
+    sendEmail({
+      to: email,
+      subject: '[E‑Matrimonials] Your ad request was submitted',
+      text,
+      html,
+      disableUnsubscribe: true,
+      logMetadata: { senderEmail: 'system', emailType: 'notification' },
+    });
   } catch (e) {
     console.error('Client submit email error:', e);
   }
@@ -312,7 +319,14 @@ router.post('/authenticated', userAuth, sanitizeInput, validate(schemas.createAu
 
   try {
     const { html, text } = tmplClientSubmitted({ email: userEmail, content, lookingFor });
-    sendEmail({ to: userEmail, subject: '[E‑Matrimonials] Your ad request was submitted', text, html, disableUnsubscribe: true });
+    sendEmail({
+      to: userEmail,
+      subject: '[E‑Matrimonials] Your ad request was submitted',
+      text,
+      html,
+      disableUnsubscribe: true,
+      logMetadata: { senderEmail: 'system', emailType: 'notification' },
+    });
   } catch (e) {
     console.error('Authenticated submit email error:', e);
   }

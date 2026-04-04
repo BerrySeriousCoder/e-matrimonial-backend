@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { admins, adminLogs, users, posts, paymentTransactions, postEmails, searchFilterSections, searchFilterOptions, userEmailLimits } from "./schema";
+import { admins, adminLogs, users, posts, paymentTransactions, postEmails, searchFilterSections, searchFilterOptions, userEmailLimits, emailLogs } from "./schema";
 
 export const adminLogsRelations = relations(adminLogs, ({one}) => ({
 	admin: one(admins, {
@@ -22,12 +22,14 @@ export const postsRelations = relations(posts, ({one, many}) => ({
 		references: [paymentTransactions.id]
 	}),
 	postEmails: many(postEmails),
+	emailLogs: many(emailLogs),
 }));
 
 export const usersRelations = relations(users, ({many}) => ({
 	posts: many(posts),
 	postEmails: many(postEmails),
 	userEmailLimits: many(userEmailLimits),
+	emailLogs: many(emailLogs),
 }));
 
 export const paymentTransactionsRelations = relations(paymentTransactions, ({many}) => ({
@@ -59,6 +61,17 @@ export const searchFilterSectionsRelations = relations(searchFilterSections, ({m
 export const userEmailLimitsRelations = relations(userEmailLimits, ({one}) => ({
 	user: one(users, {
 		fields: [userEmailLimits.userId],
+		references: [users.id]
+	}),
+}));
+
+export const emailLogsRelations = relations(emailLogs, ({one}) => ({
+	post: one(posts, {
+		fields: [emailLogs.postId],
+		references: [posts.id]
+	}),
+	user: one(users, {
+		fields: [emailLogs.userId],
 		references: [users.id]
 	}),
 }));

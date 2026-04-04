@@ -159,16 +159,53 @@ router.get('/posts', requireAdminAuth, validateQuery(schemas.adminPostsQuery), a
     const whereClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
 
     const [postsData, totalCount] = await Promise.all([
-      db.select().from(posts).where(whereClause).orderBy(desc(posts.createdAt)).limit(limit).offset(offset),
+      db.select({
+        id: posts.id,
+        email: posts.email,
+        content: posts.content,
+        userId: posts.userId,
+        lookingFor: posts.lookingFor,
+        duration: posts.duration,
+        expiresAt: posts.expiresAt,
+        fontSize: posts.fontSize,
+        bgColor: posts.bgColor,
+        icon: posts.icon,
+        status: posts.status,
+        createdAt: posts.createdAt,
+        createdByAdminId: posts.createdByAdminId,
+        paymentTransactionId: posts.paymentTransactionId,
+        baseAmount: posts.baseAmount,
+        finalAmount: posts.finalAmount,
+        couponCode: posts.couponCode,
+        publishedAt: posts.publishedAt,
+        previousPostId: posts.previousPostId,
+        createdByAdmin: {
+          id: admins.id,
+          email: admins.email,
+          role: admins.role,
+        },
+      })
+        .from(posts)
+        .leftJoin(admins, eq(posts.createdByAdminId, admins.id))
+        .where(whereClause)
+        .orderBy(desc(posts.createdAt))
+        .limit(limit)
+        .offset(offset),
       db.select({ count: sql<number>`count(*)` }).from(posts).where(whereClause)
     ]);
+
+    // Clean up createdByAdmin — set to null if no join match
+    const cleanedPosts = postsData.map(p => ({
+      ...p,
+      createdByAdmin: p.createdByAdmin?.id ? p.createdByAdmin : null,
+    }));
 
     const total = totalCount[0]?.count || 0;
     const totalPages = Math.ceil(total / limit);
 
     res.json({
       success: true,
-      posts: postsData,
+      posts: cleanedPosts,
       total,
       page: Number(page),
       totalPages
@@ -176,6 +213,140 @@ router.get('/posts', requireAdminAuth, validateQuery(schemas.adminPostsQuery), a
 
   } catch (error) {
     console.error('Get admin posts error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+// Get Single Post (Admin)
+router.get('/posts/:id', requireAdminAuth, async (req: AdminRequest, res) => {
+  const { id } = req.params;
+  try {
+    const [post] = await db.select({
+      id: posts.id,
+      email: posts.email,
+      content: posts.content,
+      userId: posts.userId,
+      lookingFor: posts.lookingFor,
+      duration: posts.duration,
+      expiresAt: posts.expiresAt,
+      fontSize: posts.fontSize,
+      bgColor: posts.bgColor,
+      icon: posts.icon,
+      status: posts.status,
+      createdAt: posts.createdAt,
+      createdByAdminId: posts.createdByAdminId,
+      paymentTransactionId: posts.paymentTransactionId,
+      baseAmount: posts.baseAmount,
+      finalAmount: posts.finalAmount,
+      couponCode: posts.couponCode,
+      publishedAt: posts.publishedAt,
+      previousPostId: posts.previousPostId,
+      createdByAdmin: {
+        id: admins.id,
+        email: admins.email,
+        role: admins.role,
+      },
+    })
+      .from(posts)
+      .leftJoin(admins, eq(posts.createdByAdminId, admins.id))
+      .where(eq(posts.id, Number(id)));
+
+    if (!post) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
+    res.json({
+      success: true,
+      post: {
+        ...post,
+        createdByAdmin: post.createdByAdmin?.id ? post.createdByAdmin : null,
+      }
+    });
+  } catch (error) {
+    console.error('Get single admin post error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+// Republish Archived Post (creates a new post linked to the old one)
+router.post('/posts/:id/republish', requireAdminAuth, sanitizeInput, async (req: AdminRequest, res) => {
+  const { id } = req.params;
+
+  try {
+    const [archivedPost] = await db.select().from(posts).where(eq(posts.id, Number(id)));
+
+    if (!archivedPost) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
+    if (archivedPost.status !== 'archived') {
+      return res.status(400).json({ success: false, message: 'Only archived posts can be republished' });
+    }
+
+    const content = req.body.content || archivedPost.content;
+    const postLookingFor = req.body.lookingFor || archivedPost.lookingFor;
+    const postFontSize = req.body.fontSize || archivedPost.fontSize || 'default';
+    const postBgColor = req.body.bgColor !== undefined ? req.body.bgColor : archivedPost.bgColor;
+    const postIcon = req.body.icon !== undefined ? req.body.icon : archivedPost.icon;
+    const duration = archivedPost.duration || 14;
+
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + duration);
+
+    const [newPost] = await db.insert(posts)
+      .values({
+        email: archivedPost.email,
+        content,
+        userId: archivedPost.userId,
+        lookingFor: postLookingFor,
+        duration,
+        expiresAt: expiresAt.toISOString(),
+        fontSize: postFontSize,
+        bgColor: postBgColor,
+        icon: postIcon,
+        status: 'published',
+        publishedAt: new Date().toISOString(),
+        createdByAdminId: req.admin!.adminId,
+        previousPostId: archivedPost.id,
+        baseAmount: 0,
+        finalAmount: 0,
+        couponCode: archivedPost.couponCode,
+      })
+      .returning();
+
+    await logAdminAction(req, {
+      action: 'republish_post',
+      entityType: 'post',
+      entityId: newPost.id,
+      oldData: { previousPostId: archivedPost.id, previousStatus: archivedPost.status },
+      newData: { status: 'published', previousPostId: archivedPost.id },
+      details: `Admin ${req.admin!.email} republished archived post #${archivedPost.id} as new post #${newPost.id}`,
+    });
+
+    try {
+      const { html, text } = tmplPublished({
+        email: archivedPost.email,
+        expiresAt,
+      });
+      sendEmail({
+        to: archivedPost.email,
+        subject: '[E‑Matrimonials] Your ad has been republished',
+        text,
+        html,
+        disableUnsubscribe: true,
+        logMetadata: { senderEmail: 'system', postId: newPost.id, emailType: 'status_update' },
+      });
+    } catch (e) {
+      console.error('Republish email error:', e);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Post republished successfully as a new ad',
+      post: newPost,
+    });
+  } catch (error) {
+    console.error('Republish post error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
@@ -188,6 +359,10 @@ router.put('/posts/:id/edit', requireSuperadminAuth, sanitizeInput, validate(sch
     const [currentPost] = await db.select().from(posts).where(eq(posts.id, Number(id)));
     if (!currentPost) {
       return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
+    if (currentPost.status === 'deleted') {
+      return res.status(400).json({ success: false, message: 'Deleted posts cannot be edited' });
     }
 
     const updateData: any = {};
@@ -224,7 +399,7 @@ router.put('/posts/:id/edit', requireSuperadminAuth, sanitizeInput, validate(sch
 // Update Post Status
 router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res) => {
   const { id } = req.params;
-  let { status, reason } = req.body;
+  let { status, reason, freeAd, sendEmail: shouldSendEmail } = req.body;
 
   if (!status || !['pending', 'published', 'archived', 'deleted', 'expired', 'edited', 'payment_pending'].includes(status)) {
     return res.status(400).json({ success: false, message: 'Valid status required' });
@@ -238,8 +413,13 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
       return res.status(404).json({ success: false, message: 'Post not found' });
     }
 
-    // If admin is trying to publish a pending post, redirect to payment_pending flow
-    if (status === 'published' && currentPost.status === 'pending') {
+    if (currentPost.status === 'deleted') {
+      return res.status(400).json({ success: false, message: 'Deleted posts cannot be modified' });
+    }
+
+    // If admin is trying to publish a pending/edited post, redirect to payment_pending flow
+    // UNLESS freeAd flag is set — then directly publish without payment
+    if (status === 'published' && (currentPost.status === 'pending' || currentPost.status === 'edited') && !freeAd) {
       status = 'payment_pending';
     }
 
@@ -248,12 +428,16 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
     let paymentLink = null;
 
     if (status === 'published') {
-      // For direct publishing (bypass payment), set expiresAt to current date + duration
+      // For direct publishing (bypass payment or free ad), set expiresAt to current date + duration
       const expiresAt = new Date();
       const duration = currentPost.duration || 14; // Default to 14 days if not set
       expiresAt.setDate(expiresAt.getDate() + duration);
       updateData.expiresAt = expiresAt.toISOString();
       updateData.publishedAt = new Date().toISOString();
+      if (freeAd) {
+        updateData.finalAmount = 0;
+        updateData.baseAmount = 0;
+      }
     } else if (status === 'payment_pending') {
       // Calculate payment amount and create payment link
       try {
@@ -326,7 +510,10 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
     let actionType = 'delete_post';
     let actionVerb = 'deleted';
 
-    if (status === 'published') {
+    if (status === 'published' && freeAd) {
+      actionType = 'approve_post_free';
+      actionVerb = 'published as free ad';
+    } else if (status === 'published') {
       actionType = 'approve_post';
       actionVerb = 'approved';
     } else if (status === 'payment_pending') {
@@ -361,7 +548,8 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
           subject: '[E‑Matrimonials] Your ad is published',
           text,
           html,
-          disableUnsubscribe: true
+          disableUnsubscribe: true,
+          logMetadata: { senderEmail: 'system', postId: currentPost.id, emailType: 'status_update' },
         });
       } else if (status === 'payment_pending' && paymentLink) {
         const { html, text } = tmplPaymentRequired({
@@ -375,9 +563,10 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
           subject: '[E‑Matrimonials] Your matrimonial ad has been approved, kindly proceed for payment',
           text,
           html,
-          disableUnsubscribe: true
+          disableUnsubscribe: true,
+          logMetadata: { senderEmail: 'system', postId: currentPost.id, emailType: 'payment' },
         });
-      } else if (status === 'archived') {
+      } else if (status === 'archived' && shouldSendEmail !== false) {
         const { html, text } = tmplPostArchived({
           email: currentPost.email,
           contentPreview,
@@ -387,7 +576,8 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
           to: currentPost.email,
           subject: '[E‑Matrimonials] Your ad has been archived',
           text,
-          html
+          html,
+          logMetadata: { senderEmail: 'system', postId: currentPost.id, emailType: 'status_update' },
         });
       } else if (status === 'deleted') {
         const { html, text } = tmplPostDeleted({
@@ -399,7 +589,8 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
           to: currentPost.email,
           subject: '[E‑Matrimonials] Your ad has been removed',
           text,
-          html
+          html,
+          logMetadata: { senderEmail: 'system', postId: currentPost.id, emailType: 'status_update' },
         });
       }
     } catch (e) {
@@ -475,7 +666,8 @@ router.post('/posts', requireAdminAuth, sanitizeInput, validate(schemas.createAd
         icon: icon || null,
         couponCode: couponCode || null,
         status: 'published', // Admin created posts are published directly
-        publishedAt: new Date().toISOString()
+        publishedAt: new Date().toISOString(),
+        createdByAdminId: req.admin!.adminId,
       })
       .returning();
 

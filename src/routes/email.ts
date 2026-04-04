@@ -18,6 +18,7 @@ import { tmplNewMessageToPoster } from '../utils/emailTemplates';
 import { moderateImage, isAllowedImageType, MAX_IMAGE_SIZE } from '../utils/imageModeration';
 import { parseDbTimestampAsUtc } from '../utils/dateUtils';
 import { validateSessionToken } from '../utils/sessionToken';
+import { uploadAttachment, isR2Configured, AttachmentMeta } from '../utils/r2Storage';
 
 const router = express.Router();
 
@@ -87,6 +88,7 @@ router.post('/send', uploadWithErrorHandling('attachments'), sanitizeInput, vali
 
     // If attachments provided, moderate each one
     const attachments: EmailAttachment[] = [];
+    const r2AttachmentMeta: AttachmentMeta[] = [];
     if (files && files.length > 0) {
       for (const file of files) {
         console.log('Moderating uploaded image:', { filename: file.originalname, size: file.size, type: file.mimetype });
@@ -100,13 +102,21 @@ router.post('/send', uploadWithErrorHandling('attachments'), sanitizeInput, vali
           });
         }
 
-        // Image is safe, add to attachments
         attachments.push({
           content: file.buffer.toString('base64'),
           filename: file.originalname,
           type: file.mimetype,
           disposition: 'attachment',
         });
+
+        if (isR2Configured()) {
+          try {
+            const meta = await uploadAttachment(file.buffer, file.originalname, file.mimetype, postId);
+            r2AttachmentMeta.push(meta);
+          } catch (r2Err) {
+            console.error('R2 upload failed (non-blocking):', r2Err);
+          }
+        }
       }
     }
 
@@ -185,19 +195,27 @@ router.post('/send', uploadWithErrorHandling('attachments'), sanitizeInput, vali
       message,
     });
 
+    const emailSubject = `[${lookingFor} - "${contentPreview}"] New message from ${email}`;
+
     // Attempt to send email with detailed error handling
     try {
       await sendEmail({
         to: post[0].email,
-        subject: `[${lookingFor} - "${contentPreview}"] New message from ${email}`,
+        subject: emailSubject,
         text,
         html,
         replyTo: email,
         attachments: attachments.length > 0 ? attachments : undefined,
+        logMetadata: {
+          senderEmail: email,
+          postId,
+          emailType: 'contact',
+          userMessage: message,
+          attachmentMeta: r2AttachmentMeta.length > 0 ? r2AttachmentMeta : undefined,
+        },
       });
       console.log(`Email successfully sent to ${post[0].email} from ${email} for post ${postId}`, attachments.length > 0 ? `(with ${attachments.length} attachment(s))` : '');
     } catch (emailError: any) {
-      // Log detailed error before re-throwing
       console.error('Failed to send email via Resend:', {
         error: emailError?.message,
         code: emailError?.code,
@@ -207,7 +225,7 @@ router.post('/send', uploadWithErrorHandling('attachments'), sanitizeInput, vali
         postId,
         resendError: emailError?.message
       });
-      throw emailError; // Re-throw to be caught by outer catch
+      throw emailError;
     }
 
     // Record the email sent (only if sendEmail succeeded)
@@ -254,6 +272,7 @@ router.post('/send-authenticated', uploadWithErrorHandling('attachments'), userA
 
     // If attachments provided, moderate each one
     const attachments: EmailAttachment[] = [];
+    const r2AttachmentMeta: AttachmentMeta[] = [];
     if (files && files.length > 0) {
       for (const file of files) {
         console.log('Moderating uploaded image:', { filename: file.originalname, size: file.size, type: file.mimetype });
@@ -267,13 +286,21 @@ router.post('/send-authenticated', uploadWithErrorHandling('attachments'), userA
           });
         }
 
-        // Image is safe, add to attachments
         attachments.push({
           content: file.buffer.toString('base64'),
           filename: file.originalname,
           type: file.mimetype,
           disposition: 'attachment',
         });
+
+        if (isR2Configured()) {
+          try {
+            const meta = await uploadAttachment(file.buffer, file.originalname, file.mimetype, postId);
+            r2AttachmentMeta.push(meta);
+          } catch (r2Err) {
+            console.error('R2 upload failed (non-blocking):', r2Err);
+          }
+        }
       }
     }
 
@@ -316,19 +343,28 @@ router.post('/send-authenticated', uploadWithErrorHandling('attachments'), userA
       message,
     });
 
+    const authEmailSubject = `[${lookingFor} - "${contentPreview}"] New message from ${userEmail}`;
+
     // Attempt to send email with detailed error handling
     try {
       await sendEmail({
         to: post[0].email,
-        subject: `[${lookingFor} - "${contentPreview}"] New message from ${userEmail}`,
+        subject: authEmailSubject,
         text: tpl.text,
         html: tpl.html,
         replyTo: userEmail,
         attachments: attachments.length > 0 ? attachments : undefined,
+        logMetadata: {
+          senderEmail: userEmail,
+          postId,
+          userId,
+          emailType: 'contact',
+          userMessage: message,
+          attachmentMeta: r2AttachmentMeta.length > 0 ? r2AttachmentMeta : undefined,
+        },
       });
       console.log(`Authenticated email successfully sent to ${post[0].email} from ${userEmail} for post ${postId}`, attachments.length > 0 ? `(with ${attachments.length} attachment(s))` : '');
     } catch (emailError: any) {
-      // Log detailed error before re-throwing
       console.error('Failed to send authenticated email via Resend:', {
         error: emailError?.message,
         code: emailError?.code,
@@ -339,7 +375,7 @@ router.post('/send-authenticated', uploadWithErrorHandling('attachments'), userA
         userId,
         resendError: emailError?.message
       });
-      throw emailError; // Re-throw to be caught by outer catch
+      throw emailError;
     }
 
     // Record the email and increment daily count (only if sendEmail succeeded)
