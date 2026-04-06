@@ -17,6 +17,8 @@ import webhookRouter from './routes/webhook';
 import analyticsRouter from './routes/analytics';
 import emailAuditRouter from './routes/emailAudit';
 import unsubscribeRouter from './routes/unsubscribe';
+import classificationsRouter from './routes/classifications';
+import aiSearchRouter from './routes/aiSearch';
 
 // Security imports
 import {
@@ -111,6 +113,12 @@ app.use('/api/user', AL, userRouter);
 app.use('/api/admin', ADM, adminRouter);
 app.use('/api/admin/management', SAL, adminManagementRouter);
 app.use('/api/data-entry', ADM, dataEntryRouter);
+
+// Classification routes
+app.use('/api/classifications', GL, classificationsRouter);
+
+// AI search routes
+app.use('/api/ai-search', GL, aiSearchRouter);
 
 // Search filters routes
 app.use('/api/search-filters', GL, searchFiltersRouter);

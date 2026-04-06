@@ -10,6 +10,7 @@ import { sendEmail } from '../utils/sendEmail';
 import { tmplDataEntrySubmitted } from '../utils/emailTemplates';
 import { getTextLength } from '../utils/htmlUtils';
 import { trackDataEntryPerformance } from '../middleware/analytics';
+import { enrichPostClassifications } from '../utils/classificationEnricher';
 
 const router = express.Router();
 
@@ -44,7 +45,7 @@ router.get('/posts', requireRole(['data_entry']), validateQuery(schemas.adminPos
 // POST /api/data-entry/posts - create a new post on behalf of customer
 router.post('/posts', requireRole(['data_entry']), sanitizeInput, validate(schemas.createAdminPost), async (req: AdminRequest, res) => {
   try {
-    const { email, content, lookingFor, duration, fontSize, bgColor, icon, couponCode } = req.body as any;
+    const { email, content, lookingFor, duration, fontSize, bgColor, icon, couponCode, classificationId } = req.body as any;
 
     // Ensure user exists (same as admin create)
     let userId;
@@ -68,6 +69,7 @@ router.post('/posts', requireRole(['data_entry']), sanitizeInput, validate(schem
       bgColor: bgColor || null,
       icon: icon || null,
       couponCode: couponCode || null,
+      classificationId: classificationId || null,
       status: 'pending',
       createdByAdminId: req.admin!.adminId,
     }).returning();
@@ -85,6 +87,8 @@ router.post('/posts', requireRole(['data_entry']), sanitizeInput, validate(schem
     } catch (e) {
       console.error('DataEntry submit email error:', e);
     }
+
+    enrichPostClassifications(newPost.id, content).catch(() => {});
 
     // Track data entry performance
     trackDataEntryPerformance(req.admin!.adminId.toString(), 'create', {
@@ -119,6 +123,10 @@ router.put('/posts/:id', requireRole(['data_entry']), sanitizeInput, validate(sc
     delete updateData.duration; // duration is used only by admin approval/create
 
     const [updated] = await db.update(posts).set(updateData).where(eq(posts.id, Number(id))).returning();
+
+    if (updateData.content) {
+      enrichPostClassifications(Number(id), updateData.content).catch(() => {});
+    }
 
     // Track data entry performance
     trackDataEntryPerformance(req.admin!.adminId.toString(), 'edit', {

@@ -11,6 +11,7 @@ import { sendEmail } from '../utils/sendEmail';
 import { tmplPublished, tmplPaymentRequired, tmplPostArchived, tmplPostDeleted } from '../utils/emailTemplates';
 import { stripHtml } from '../utils/htmlUtils';
 import { calculatePaymentAmount } from '../utils/paymentCalculation';
+import { enrichPostClassifications } from '../utils/classificationEnricher';
 import RazorpayService from '../utils/razorpayService';
 import { createRateLimiters } from '../middleware/security';
 import { trackAnalytics, trackDataEntryPerformance } from '../middleware/analytics';
@@ -288,6 +289,7 @@ router.post('/posts/:id/republish', requireAdminAuth, sanitizeInput, async (req:
     const postFontSize = req.body.fontSize || archivedPost.fontSize || 'default';
     const postBgColor = req.body.bgColor !== undefined ? req.body.bgColor : archivedPost.bgColor;
     const postIcon = req.body.icon !== undefined ? req.body.icon : archivedPost.icon;
+    const postClassificationId = req.body.classificationId !== undefined ? req.body.classificationId : archivedPost.classificationId;
     const duration = archivedPost.duration || 14;
 
     const expiresAt = new Date();
@@ -304,6 +306,7 @@ router.post('/posts/:id/republish', requireAdminAuth, sanitizeInput, async (req:
         fontSize: postFontSize,
         bgColor: postBgColor,
         icon: postIcon,
+        classificationId: postClassificationId || null,
         status: 'published',
         publishedAt: new Date().toISOString(),
         createdByAdminId: req.admin!.adminId,
@@ -313,6 +316,8 @@ router.post('/posts/:id/republish', requireAdminAuth, sanitizeInput, async (req:
         couponCode: archivedPost.couponCode,
       })
       .returning();
+
+    enrichPostClassifications(newPost.id, content).catch(() => {});
 
     await logAdminAction(req, {
       action: 'republish_post',
@@ -371,6 +376,7 @@ router.put('/posts/:id/edit', requireSuperadminAuth, sanitizeInput, validate(sch
     if (req.body.fontSize !== undefined) updateData.fontSize = req.body.fontSize;
     if (req.body.bgColor !== undefined) updateData.bgColor = req.body.bgColor;
     if (req.body.icon !== undefined) updateData.icon = req.body.icon;
+    if (req.body.classificationId !== undefined) updateData.classificationId = req.body.classificationId;
 
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({ success: false, message: 'No fields to update' });
@@ -380,6 +386,10 @@ router.put('/posts/:id/edit', requireSuperadminAuth, sanitizeInput, validate(sch
       .set(updateData)
       .where(eq(posts.id, Number(id)))
       .returning();
+
+    if (updateData.content) {
+      enrichPostClassifications(Number(id), updateData.content).catch(() => {});
+    }
 
     // Log the admin action
     await logAdminAction(req, {

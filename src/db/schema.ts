@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, timestamp, unique, integer, foreignKey, jsonb, text, boolean, index, numeric, pgEnum } from "drizzle-orm/pg-core"
+import { pgTable, serial, varchar, timestamp, unique, integer, foreignKey, jsonb, text, boolean, index, numeric, pgEnum, real } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 export const adminRole = pgEnum("admin_role", ['superadmin', 'admin', 'data_entry'])
@@ -92,6 +92,7 @@ export const posts = pgTable("posts", {
 	couponCode: varchar("coupon_code", { length: 50 }),
 	publishedAt: timestamp("published_at", { mode: 'string' }),
 	previousPostId: integer("previous_post_id"),
+	classificationId: integer("classification_id"),
 }, (table) => [
 	foreignKey({
 		columns: [table.userId],
@@ -108,7 +109,13 @@ export const posts = pgTable("posts", {
 		foreignColumns: [table.id],
 		name: "posts_previous_post_id_fkey"
 	}),
+	foreignKey({
+		columns: [table.classificationId],
+		foreignColumns: [classificationOptions.id],
+		name: "posts_classification_id_fkey"
+	}),
 	index("idx_posts_previous_post_id").on(table.previousPostId),
+	index("idx_posts_classification_id").on(table.classificationId),
 ]);
 
 export const postEmails = pgTable("post_emails", {
@@ -320,6 +327,58 @@ export const emailLogs = pgTable("email_logs", {
 	index("idx_email_logs_email_type").on(table.emailType),
 	foreignKey({ columns: [table.postId], foreignColumns: [posts.id], name: "email_logs_post_id_fk" }),
 	foreignKey({ columns: [table.userId], foreignColumns: [users.id], name: "email_logs_user_id_fk" }),
+]);
+
+// Classification taxonomy tables
+export const classificationCategories = pgTable("classification_categories", {
+	id: serial().primaryKey().notNull(),
+	name: varchar({ length: 100 }).notNull(),
+	displayName: varchar("display_name", { length: 100 }).notNull(),
+	order: integer().default(0).notNull(),
+	isActive: boolean("is_active").default(true).notNull(),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	unique("classification_categories_name_unique").on(table.name),
+]);
+
+export const classificationOptions = pgTable("classification_options", {
+	id: serial().primaryKey().notNull(),
+	categoryId: integer("category_id").notNull(),
+	name: varchar({ length: 100 }).notNull(),
+	displayName: varchar("display_name", { length: 100 }).notNull(),
+	forBride: boolean("for_bride").default(true).notNull(),
+	forGroom: boolean("for_groom").default(true).notNull(),
+	order: integer().default(0).notNull(),
+	isActive: boolean("is_active").default(true).notNull(),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	foreignKey({
+		columns: [table.categoryId],
+		foreignColumns: [classificationCategories.id],
+		name: "classification_options_category_id_fk"
+	}).onDelete("cascade"),
+	index("idx_classification_options_category_id").on(table.categoryId),
+]);
+
+export const postAiClassifications = pgTable("post_ai_classifications", {
+	id: serial().primaryKey().notNull(),
+	postId: integer("post_id").notNull(),
+	classificationOptionId: integer("classification_option_id").notNull(),
+	confidence: real().default(0).notNull(),
+	evidence: text(),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	foreignKey({
+		columns: [table.postId],
+		foreignColumns: [posts.id],
+		name: "post_ai_classifications_post_id_fk"
+	}).onDelete("cascade"),
+	foreignKey({
+		columns: [table.classificationOptionId],
+		foreignColumns: [classificationOptions.id],
+		name: "post_ai_classifications_option_id_fk"
+	}).onDelete("cascade"),
+	index("idx_post_ai_classifications_post_id").on(table.postId),
 ]);
 
 export const emailUnsubscribes = pgTable("email_unsubscribes", {

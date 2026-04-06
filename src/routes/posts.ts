@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db';
-import { posts, users, otps, searchFilterOptions, searchSynonymGroups, searchSynonymWords } from '../db/schema';
-import { eq, and, gt, isNull, inArray, desc } from 'drizzle-orm';
+import { posts, users, otps, searchFilterOptions, searchSynonymGroups, searchSynonymWords, classificationCategories, classificationOptions } from '../db/schema';
+import { eq, and, gt, isNull, inArray, desc, asc } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { validate, sanitizeInput, validateQuery, schemas } from '../middleware/validation';
@@ -11,6 +11,7 @@ import { tmplClientSubmitted } from '../utils/emailTemplates';
 import { trackAnalytics } from '../middleware/analytics';
 import { stripHtml, getTextLength } from '../utils/htmlUtils';
 import { parseDbTimestampAsUtc } from '../utils/dateUtils';
+import { enrichPostClassifications } from '../utils/classificationEnricher';
 
 // Helper function to expand search terms using synonym dictionary
 async function expandSearchTermsWithSynonyms(terms: string[]): Promise<string[]> {
@@ -60,105 +61,74 @@ async function expandSearchTermsWithSynonyms(terms: string[]): Promise<string[]>
 
 const router = Router();
 
-// GET /api/posts - paginated (only published and non-expired posts)
+// GET /api/posts - paginated, ordered by classification
 router.get('/', validateQuery(schemas.postsQuery), async (req, res) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 20;
-  const offset = (page - 1) * limit;
-  const lookingFor = req.query.lookingFor as string; // 'bride' or 'groom'
-  const search = req.query.search as string; // search term
-  const filters = req.query.filters as string; // JSON string of selected filter options
+  const lookingFor = req.query.lookingFor as string;
+  const search = req.query.search as string;
+  const filters = req.query.filters as string;
 
-  // Build where conditions
-  const whereConditions = [
+  // When searching/filtering, fall back to simple time-based ordering
+  const isSearching = !!(search && search.trim()) || !!(filters && filters !== '[]');
+
+  // Build base where conditions
+  const whereConditions: any[] = [
     eq(posts.status, 'published'),
     gt(posts.expiresAt, new Date().toISOString())
   ];
 
-  // Add lookingFor filter if provided
   if (lookingFor && (lookingFor === 'bride' || lookingFor === 'groom')) {
     whereConditions.push(eq(posts.lookingFor, lookingFor));
   }
 
-  // Enhanced search filter with case-insensitive matching and synonym expansion
-  if (search) {
+  // Search filter with synonym expansion
+  if (search && search.trim()) {
     const searchTerms = search.trim().toLowerCase().split(/\s+/);
-
-    // Expand each search term using synonym dictionary
-    // For each original term, we get all related synonyms and search for any of them
     const termConditions = await Promise.all(searchTerms.map(async (term) => {
-      // Get expanded terms for this single term
       const expandedTerms = await expandSearchTermsWithSynonyms([term]);
-
-      // Create OR conditions for all expanded terms (synonyms)
       const synonymConditions = expandedTerms.map(expandedTerm =>
         sql`(
           LOWER(${posts.email}) LIKE ${`%${expandedTerm}%`} OR 
           LOWER(REGEXP_REPLACE(${posts.content}, '<[^>]*>', '', 'g')) LIKE ${`%${expandedTerm}%`}
         )`
       );
-
-      // Any synonym can match for this term (OR logic for synonyms)
-      if (synonymConditions.length === 1) {
-        return synonymConditions[0];
-      }
+      if (synonymConditions.length === 1) return synonymConditions[0];
       return sql`(${synonymConditions.reduce((acc, condition) => sql`${acc} OR ${condition}`)})`;
     }));
-
-    // All original search terms must match (AND logic across terms)
     if (termConditions.length > 0) {
-      // @ts-ignore - TypeScript issue with SQL conditions
+      // @ts-ignore
       whereConditions.push(and(...termConditions));
     }
   }
 
-  // Add search filter options if provided
+  // Search filter options
   if (filters) {
     try {
       const selectedOptions = JSON.parse(filters);
       if (Array.isArray(selectedOptions) && selectedOptions.length > 0) {
-
-        // Get the filter options and their values
-        const filterOptions = await db
-          .select({
-            optionId: searchFilterOptions.id,
-            sectionId: searchFilterOptions.sectionId,
-            value: searchFilterOptions.value,
-          })
+        const filterOpts = await db
+          .select({ optionId: searchFilterOptions.id, sectionId: searchFilterOptions.sectionId, value: searchFilterOptions.value })
           .from(searchFilterOptions)
           .where(inArray(searchFilterOptions.id, selectedOptions));
 
-        // Group options by section
-        const sectionGroups = filterOptions.reduce((acc, option) => {
+        const sectionGroups = filterOpts.reduce((acc, option) => {
           if (!acc[option.sectionId]) acc[option.sectionId] = [];
           acc[option.sectionId].push(option);
           return acc;
-        }, {} as Record<number, typeof filterOptions>);
+        }, {} as Record<number, typeof filterOpts>);
 
-        // For each section, find posts that match ANY option in that section
         const sectionConditions = Object.values(sectionGroups).map(sectionOptions => {
-          const optionValues = sectionOptions.map(opt => opt.value);
-
-          // Create search conditions for each option value
-          const optionConditions = optionValues.map(value => {
-            const searchValue = value.toLowerCase();
-            return sql`(
-              LOWER(${posts.content}) LIKE ${`%${searchValue}%`} OR
-              LOWER(${posts.email}) LIKE ${`%${searchValue}%`}
-            )`;
+          const optionConditions = sectionOptions.map(opt => {
+            const searchValue = opt.value.toLowerCase();
+            return sql`(LOWER(${posts.content}) LIKE ${`%${searchValue}%`} OR LOWER(${posts.email}) LIKE ${`%${searchValue}%`})`;
           });
-
-          // Any option in this section can match (OR logic within section)
-          if (optionConditions.length === 1) {
-            return optionConditions[0];
-          } else {
-            return sql`(${optionConditions.reduce((acc, condition) => sql`${acc} OR ${condition}`)})`;
-          }
+          if (optionConditions.length === 1) return optionConditions[0];
+          return sql`(${optionConditions.reduce((acc, c) => sql`${acc} OR ${c}`)})`;
         });
 
-        // All sections must match (AND logic across sections)
         if (sectionConditions.length > 0) {
-          // @ts-ignore - TypeScript issue with SQL conditions
+          // @ts-ignore
           whereConditions.push(and(...sectionConditions));
         }
       }
@@ -167,25 +137,149 @@ router.get('/', validateQuery(schemas.postsQuery), async (req, res) => {
     }
   }
 
-  const [postsData, totalCount] = await Promise.all([
-    db.select().from(posts)
-      .where(and(...whereConditions))
-      .orderBy(desc(posts.createdAt))
-      .limit(limit)
-      .offset(offset),
-    db.select({ count: sql<number>`count(*)` })
-      .from(posts)
-      .where(and(...whereConditions)),
-  ]);
+  const whereClause = and(...whereConditions);
 
-  const total = totalCount[0]?.count || 0;
-  const totalPages = Math.ceil(total / limit);
+  // Simple search mode: time-based ordering, standard pagination
+  if (isSearching) {
+    const [postsData, totalCount] = await Promise.all([
+      db.select().from(posts)
+        .where(whereClause)
+        .orderBy(desc(posts.createdAt))
+        .limit(limit)
+        .offset((page - 1) * limit),
+      db.select({ count: sql<number>`count(*)` }).from(posts).where(whereClause),
+    ]);
+
+    const total = totalCount[0]?.count || 0;
+    return res.json({ posts: postsData, total, page, totalPages: Math.ceil(total / limit) });
+  }
+
+  // Classification-based ordering mode
+  // Get counts per classification option for page mapping
+  const classificationCounts = await db
+    .select({
+      classificationId: posts.classificationId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(posts)
+    .where(whereClause)
+    .groupBy(posts.classificationId);
+
+  // Get all classification options with their categories, ordered properly
+  const allOptions = await db
+    .select({
+      optionId: classificationOptions.id,
+      optionName: classificationOptions.displayName,
+      categoryId: classificationCategories.id,
+      categoryName: classificationCategories.displayName,
+      categoryOrder: classificationCategories.order,
+      optionOrder: classificationOptions.order,
+    })
+    .from(classificationOptions)
+    .innerJoin(classificationCategories, eq(classificationOptions.categoryId, classificationCategories.id))
+    .where(eq(classificationOptions.isActive, true))
+    .orderBy(asc(classificationCategories.order), asc(classificationOptions.order));
+
+  // Build count map: optionId -> postCount
+  const countMap = new Map<number | null, number>();
+  for (const row of classificationCounts) {
+    countMap.set(row.classificationId, row.count);
+  }
+
+  // Build page map: each classification option starts on a new page
+  const classificationPageMap: {
+    optionId: number | null;
+    optionName: string;
+    categoryId: number | null;
+    categoryName: string;
+    startPage: number;
+    endPage: number;
+    postCount: number;
+  }[] = [];
+
+  let currentPage = 1;
+  for (const opt of allOptions) {
+    const postCount = countMap.get(opt.optionId) || 0;
+    if (postCount === 0) continue;
+
+    const pagesNeeded = Math.ceil(postCount / limit);
+    classificationPageMap.push({
+      optionId: opt.optionId,
+      optionName: opt.optionName,
+      categoryId: opt.categoryId,
+      categoryName: opt.categoryName,
+      startPage: currentPage,
+      endPage: currentPage + pagesNeeded - 1,
+      postCount,
+    });
+    currentPage += pagesNeeded;
+  }
+
+  // Add unclassified posts at the end
+  const unclassifiedCount = countMap.get(null) || 0;
+  if (unclassifiedCount > 0) {
+    const pagesNeeded = Math.ceil(unclassifiedCount / limit);
+    classificationPageMap.push({
+      optionId: null,
+      optionName: 'Unclassified',
+      categoryId: null,
+      categoryName: 'Other',
+      startPage: currentPage,
+      endPage: currentPage + pagesNeeded - 1,
+      postCount: unclassifiedCount,
+    });
+    currentPage += pagesNeeded;
+  }
+
+  const totalPages = currentPage - 1 || 1;
+  const clampedPage = Math.min(Math.max(1, page), totalPages);
+
+  // Determine which classification the requested page falls under
+  let currentClassification = classificationPageMap.find(
+    c => clampedPage >= c.startPage && clampedPage <= c.endPage
+  ) || null;
+
+  // If no classifications have posts, return empty
+  if (!currentClassification) {
+    return res.json({
+      posts: [],
+      total: 0,
+      page: 1,
+      totalPages: 1,
+      currentClassification: null,
+      classificationPageMap: [],
+    });
+  }
+
+  // Calculate offset within the current classification
+  const pageWithinClassification = clampedPage - currentClassification.startPage;
+  const offsetWithinClassification = pageWithinClassification * limit;
+
+  // Fetch posts for the current classification
+  const classificationWhere = currentClassification.optionId !== null
+    ? [...whereConditions, eq(posts.classificationId, currentClassification.optionId)]
+    : [...whereConditions, sql`${posts.classificationId} IS NULL`];
+
+  const postsData = await db.select().from(posts)
+    .where(and(...classificationWhere))
+    .orderBy(desc(posts.createdAt))
+    .limit(limit)
+    .offset(offsetWithinClassification);
+
+  const total = classificationCounts.reduce((sum, c) => sum + c.count, 0);
 
   res.json({
     posts: postsData,
     total,
-    page,
+    page: clampedPage,
     totalPages,
+    currentClassification: {
+      optionId: currentClassification.optionId,
+      optionName: currentClassification.optionName,
+      categoryId: currentClassification.categoryId,
+      categoryName: currentClassification.categoryName,
+    },
+    classificationPageMap,
   });
 });
 
@@ -216,7 +310,8 @@ router.post('/', sanitizeInput, validate(schemas.createPost), async (req, res) =
     fontSize,
     bgColor,
     icon,
-    couponCode
+    couponCode,
+    classificationId
   } = req.body;
 
   // Verify OTP
@@ -269,6 +364,7 @@ router.post('/', sanitizeInput, validate(schemas.createPost), async (req, res) =
     bgColor,
     icon: icon || null,
     couponCode: couponCode || null,
+    classificationId: classificationId || null,
     status: 'pending'
   }).returning();
 
@@ -287,6 +383,8 @@ router.post('/', sanitizeInput, validate(schemas.createPost), async (req, res) =
     console.error('Client submit email error:', e);
   }
 
+  enrichPostClassifications(result[0].id, content).catch(() => {});
+
   // Track analytics event
   trackAnalytics('ad_submission', {
     duration,
@@ -301,7 +399,7 @@ router.post('/', sanitizeInput, validate(schemas.createPost), async (req, res) =
 
 // POST /api/posts/authenticated - create post for authenticated users (no OTP required)
 router.post('/authenticated', userAuth, sanitizeInput, validate(schemas.createAuthenticatedPost), async (req: any, res) => {
-  const { content, lookingFor, duration, fontSize, bgColor, icon, couponCode } = req.body;
+  const { content, lookingFor, duration, fontSize, bgColor, icon, couponCode, classificationId } = req.body;
   const userEmail = req.user.email; // From JWT token
 
   // Create post (expiresAt will be set when admin approves)
@@ -314,6 +412,7 @@ router.post('/authenticated', userAuth, sanitizeInput, validate(schemas.createAu
     bgColor,
     icon: icon || null,
     couponCode: couponCode || null,
+    classificationId: classificationId || null,
     status: 'pending'
   }).returning();
 
@@ -330,6 +429,8 @@ router.post('/authenticated', userAuth, sanitizeInput, validate(schemas.createAu
   } catch (e) {
     console.error('Authenticated submit email error:', e);
   }
+
+  enrichPostClassifications(result[0].id, content).catch(() => {});
 
   // Track analytics event
   trackAnalytics('ad_submission', {

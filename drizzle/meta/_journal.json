@@ -183,6 +183,13 @@
       "when": 1774869440611,
       "tag": "0025_shallow_mulholland_black",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1775295766099,
+      "tag": "0026_bored_enchantress",
+      "breakpoints": true
     }
   ]
 }
