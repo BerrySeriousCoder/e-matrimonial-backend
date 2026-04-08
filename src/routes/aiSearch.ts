@@ -109,7 +109,13 @@ RULES:
     ];
 
     if (intent.lookingFor !== 'any') {
-      whereConditions.push(eq(posts.lookingFor, intent.lookingFor));
+      // IMPORTANT: Invert the lookingFor for the DB query.
+      // The AI intent means "the user wants to FIND a [bride/groom]".
+      // A post's lookingFor field means "the poster IS looking for a [bride/groom]".
+      // So if the user wants a groom (boy), we show posts where the person IS a groom,
+      // i.e. posts where lookingFor = 'bride' (a man seeking a bride).
+      const dbLookingFor = intent.lookingFor === 'groom' ? 'bride' : 'groom';
+      whereConditions.push(eq(posts.lookingFor, dbLookingFor));
     }
 
     const validIds = intent.classificationIds.filter((id) =>
