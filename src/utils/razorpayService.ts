@@ -94,6 +94,60 @@ export class RazorpayService {
   }
 
   /**
+   * Create a Razorpay Order for checkout-based payments
+   */
+  static async createOrder(
+    amount: number,
+    postId: number,
+    receipt?: string
+  ): Promise<RazorpayOrder> {
+    try {
+      const order = await razorpay.orders.create({
+        amount: amount * 100, // Convert rupees to paise
+        currency: 'INR',
+        receipt: receipt || `post_${postId}_${Date.now()}`,
+        notes: {
+          postId: postId.toString(),
+        },
+      });
+
+      return {
+        id: order.id,
+        amount: typeof order.amount === 'string' ? parseInt(order.amount) : order.amount,
+        currency: order.currency,
+        status: order.status,
+        created_at: order.created_at,
+      };
+    } catch (error) {
+      console.error('Error creating Razorpay order:', error);
+      throw new Error('Failed to create Razorpay order');
+    }
+  }
+
+  /**
+   * Verify order-based payment signature (for Checkout flow)
+   * Signature = HMAC_SHA256(order_id + "|" + razorpay_payment_id, secret)
+   */
+  static verifyOrderPaymentSignature(
+    orderId: string,
+    paymentId: string,
+    signature: string
+  ): boolean {
+    try {
+      const payload = `${orderId}|${paymentId}`;
+      const expectedSignature = crypto
+        .createHmac('sha256', process.env.RAZORPAY_SECRET!)
+        .update(payload)
+        .digest('hex');
+
+      return expectedSignature === signature;
+    } catch (error) {
+      console.error('Error verifying order payment signature:', error);
+      return false;
+    }
+  }
+
+  /**
    * Get payment details
    */
   static async getPaymentDetails(paymentId: string) {

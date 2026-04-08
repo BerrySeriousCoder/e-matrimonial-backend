@@ -222,10 +222,12 @@ export const paymentTransactions = pgTable("payment_transactions", {
 	couponCode: varchar("coupon_code", { length: 50 }),
 	discountAmount: integer("discount_amount").default(0).notNull(),
 	finalAmount: integer("final_amount").notNull(),
+	razorpayOrderId: varchar("razorpay_order_id", { length: 255 }),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
 	index("idx_payment_transactions_post_id").using("btree", table.postId.asc().nullsLast().op("int4_ops")),
+	index("idx_payment_transactions_razorpay_order_id").using("btree", table.razorpayOrderId.asc().nullsLast().op("text_ops")),
 	index("idx_payment_transactions_razorpay_payment_link_id").using("btree", table.razorpayPaymentLinkId.asc().nullsLast().op("text_ops")),
 	index("idx_payment_transactions_status").using("btree", table.status.asc().nullsLast().op("text_ops")),
 ]);

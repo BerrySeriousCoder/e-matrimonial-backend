@@ -71,7 +71,7 @@ export const schemas = {
     bgColor: Joi.string().valid(...ALLOWED_BG_COLORS).default('#ffffff'),
     icon: Joi.string().valid(...ALLOWED_ICONS).optional().allow(null),
     couponCode: Joi.string().optional().allow(''),
-    classificationId: Joi.number().integer().positive().optional().allow(null)
+    classificationId: Joi.number().integer().positive().required()
   }).messages({
     'string.textLength': 'Content text length must be between 10 and 1000 characters (currently {{#textLength}})'
   }),
@@ -107,7 +107,7 @@ export const schemas = {
     bgColor: Joi.string().valid(...ALLOWED_BG_COLORS).default('#ffffff'),
     icon: Joi.string().valid(...ALLOWED_ICONS).optional().allow(null),
     couponCode: Joi.string().optional().allow(''),
-    classificationId: Joi.number().integer().positive().optional().allow(null)
+    classificationId: Joi.number().integer().positive().required()
   }).messages({
     'string.textLength': 'Content text length must be between 10 and 1000 characters (currently {{#textLength}})'
   }),

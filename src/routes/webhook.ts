@@ -74,6 +74,9 @@ router.post('/razorpay', async (req, res) => {
       case 'payment_link.cancelled':
         await handlePaymentLinkCancelled(event.payload || event);
         break;
+      case 'payment.captured':
+        await handlePaymentCaptured(event.payload || event);
+        break;
       default:
         console.log('Unhandled webhook event:', event.event);
     }
@@ -324,6 +327,142 @@ async function handlePaymentLinkCancelled(payload: any) {
     }
   } catch (error) {
     console.error('Error handling payment link cancelled:', error);
+  }
+}
+
+/**
+ * Handle payment.captured event (for Razorpay Checkout / Orders API payments)
+ * This is the authoritative confirmation for order-based payments.
+ */
+async function handlePaymentCaptured(payload: any) {
+  console.log('💰 Processing payment.captured event');
+  try {
+    const payment = payload.payment?.entity;
+    if (!payment) {
+      console.error('No payment entity in payload');
+      return;
+    }
+
+    const orderId = payment.order_id;
+    const paymentId = payment.id;
+
+    if (!orderId) {
+      console.log('payment.captured without order_id — likely a payment link payment, skipping');
+      return;
+    }
+
+    console.log('Payment captured for order:', orderId, 'payment:', paymentId);
+
+    // Find the payment transaction by razorpayOrderId
+    const [paymentTransaction] = await db.select()
+      .from(paymentTransactions)
+      .where(eq(paymentTransactions.razorpayOrderId, orderId));
+
+    if (!paymentTransaction) {
+      console.log('No payment transaction found for order:', orderId, '— may be a payment link order');
+      return;
+    }
+
+    // Idempotency: if already completed (from /verify-order), skip
+    if (paymentTransaction.status === 'completed') {
+      console.log('Payment transaction already completed for order:', orderId);
+      return;
+    }
+
+    // Update payment transaction
+    await db.update(paymentTransactions)
+      .set({
+        razorpayPaymentId: paymentId,
+        status: 'completed',
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(paymentTransactions.id, paymentTransaction.id));
+
+    // Get the post
+    const postId = paymentTransaction.postId;
+    if (!postId) {
+      console.error('No postId on payment transaction:', paymentTransaction.id);
+      return;
+    }
+
+    const [post] = await db.select().from(posts).where(eq(posts.id, postId));
+    if (!post) {
+      console.error('Post not found for ID:', postId);
+      return;
+    }
+
+    // Directly publish the post (user paid upfront, no admin review needed)
+    if (post.status === 'payment_pending') {
+      const duration = post.duration || 14;
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + duration);
+
+      await db.update(posts)
+        .set({
+          status: 'published',
+          publishedAt: new Date().toISOString(),
+          expiresAt: expiresAt.toISOString(),
+          paymentTransactionId: paymentTransaction.id,
+        })
+        .where(eq(posts.id, postId));
+    }
+
+    // Update coupon usage count if applicable
+    if (paymentTransaction.couponCode) {
+      const [coupon] = await db.select().from(couponCodes).where(sql`LOWER(${couponCodes.code}) = LOWER(${paymentTransaction.couponCode})`);
+      if (coupon) {
+        await db.update(couponCodes)
+          .set({
+            usedCount: (coupon.usedCount || 0) + 1
+          })
+          .where(eq(couponCodes.id, coupon.id));
+      }
+    }
+
+    // Track payment success analytics
+    try {
+      await AnalyticsService.trackEvent({
+        eventType: 'payment_success',
+        userId: post.userId?.toString(),
+        metadata: {
+          postId: postId,
+          amount: payment.amount ? payment.amount / 100 : 0,
+          currency: payment.currency || 'INR',
+          paymentId: paymentId,
+          orderId: orderId,
+          couponCode: paymentTransaction.couponCode,
+          source: 'checkout',
+        }
+      });
+    } catch (analyticsError) {
+      console.error('Error tracking payment success analytics:', analyticsError);
+    }
+
+    // Send confirmation email — ad is now live
+    try {
+      console.log('📧 Sending ad published email to:', post.email);
+      const duration = post.duration || 14;
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + duration);
+      const { html, text } = tmplPublished({
+        email: post.email,
+        expiresAt,
+      });
+      await sendEmail({
+        to: post.email,
+        subject: '[E‑Matrimonials] Your ad is now live!',
+        text,
+        html,
+        disableUnsubscribe: true,
+        logMetadata: { senderEmail: 'system', postId, emailType: 'payment' },
+      });
+      console.log('✅ Ad published email sent to:', post.email);
+    } catch (emailError) {
+      console.error('❌ Error sending ad published email:', emailError);
+    }
+
+  } catch (error) {
+    console.error('Error handling payment.captured:', error);
   }
 }
 

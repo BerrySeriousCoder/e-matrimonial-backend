@@ -1,7 +1,8 @@
-import { pgTable, serial, varchar, timestamp, unique, integer, foreignKey, jsonb, text, boolean, index, numeric, pgEnum } from "drizzle-orm/pg-core"
+import { pgTable, serial, varchar, timestamp, unique, integer, foreignKey, jsonb, text, numeric, index, boolean, real, pgEnum } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 export const adminRole = pgEnum("admin_role", ['superadmin', 'admin', 'data_entry'])
+export const analyticsEventType = pgEnum("analytics_event_type", ['ad_submission', 'ad_approval', 'ad_rejection', 'payment_success', 'payment_failure', 'email_sent', 'profile_selection'])
 export const fontSize = pgEnum("font_size", ['default', 'large'])
 export const lookingFor = pgEnum("looking_for", ['bride', 'groom'])
 export const status = pgEnum("status", ['pending', 'published', 'archived', 'deleted', 'expired', 'edited', 'payment_pending'])
@@ -71,34 +72,28 @@ export const admins = pgTable("admins", {
 	unique("admins_email_unique").on(table.email),
 ]);
 
-export const posts = pgTable("posts", {
+export const paymentConfigs = pgTable("payment_configs", {
+	id: serial().primaryKey().notNull(),
+	basePriceFirst200: integer("base_price_first_200").default(5000).notNull(),
+	additionalPricePer20Chars: integer("additional_price_per_20_chars").default(500).notNull(),
+	largeFontMultiplier: numeric("large_font_multiplier", { precision: 3, scale:  2 }).default('1.20').notNull(),
+	visibility2WeeksMultiplier: numeric("visibility_2_weeks_multiplier", { precision: 3, scale:  2 }).default('1.00').notNull(),
+	visibility3WeeksMultiplier: numeric("visibility_3_weeks_multiplier", { precision: 3, scale:  2 }).default('1.50').notNull(),
+	visibility4WeeksMultiplier: numeric("visibility_4_weeks_multiplier", { precision: 3, scale:  2 }).default('2.00').notNull(),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
+	iconPrice: integer("icon_price").default(100).notNull(),
+	highlightColorPrice: integer("highlight_color_price").default(100).notNull(),
+});
+
+export const emailUnsubscribes = pgTable("email_unsubscribes", {
 	id: serial().primaryKey().notNull(),
 	email: varchar({ length: 255 }).notNull(),
-	content: varchar({ length: 1000 }).notNull(),
-	userId: integer("user_id"),
-	lookingFor: lookingFor("looking_for"),
-	expiresAt: timestamp("expires_at", { mode: 'string' }),
-	fontSize: fontSize("font_size").default('default'),
-	bgColor: varchar("bg_color", { length: 50 }),
-	icon: varchar("icon", { length: 50 }),
-	status: status().default('pending'),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
-	createdByAdminId: integer("created_by_admin_id"),
-	paymentTransactionId: integer("payment_transaction_id"),
-	baseAmount: integer("base_amount"),
-	finalAmount: integer("final_amount"),
-	couponCode: varchar("coupon_code", { length: 50 }),
+	unsubscribedAt: timestamp("unsubscribed_at", { mode: 'string' }).defaultNow().notNull(),
+	reason: varchar({ length: 255 }),
 }, (table) => [
-	foreignKey({
-			columns: [table.userId],
-			foreignColumns: [users.id],
-			name: "posts_user_id_users_id_fk"
-		}),
-	foreignKey({
-			columns: [table.paymentTransactionId],
-			foreignColumns: [paymentTransactions.id],
-			name: "posts_payment_transaction_id_fkey"
-		}),
+	index("idx_email_unsubscribes_email").using("btree", table.email.asc().nullsLast().op("text_ops")),
+	unique("email_unsubscribes_email_unique").on(table.email),
 ]);
 
 export const postEmails = pgTable("post_emails", {
@@ -164,6 +159,38 @@ export const userEmailLimits = pgTable("user_email_limits", {
 	unique("user_email_limits_user_id_unique").on(table.userId),
 ]);
 
+export const emailLogs = pgTable("email_logs", {
+	id: serial().primaryKey().notNull(),
+	senderEmail: varchar("sender_email", { length: 255 }).notNull(),
+	recipientEmail: varchar("recipient_email", { length: 255 }).notNull(),
+	postId: integer("post_id"),
+	userId: integer("user_id"),
+	subject: text().notNull(),
+	messageText: text("message_text"),
+	messageHtml: text("message_html"),
+	emailType: varchar("email_type", { length: 50 }).notNull(),
+	attachments: jsonb(),
+	resendMessageId: varchar("resend_message_id", { length: 255 }),
+	status: varchar({ length: 20 }).default('sent').notNull(),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	index("idx_email_logs_created_at").using("btree", table.createdAt.asc().nullsLast().op("timestamp_ops")),
+	index("idx_email_logs_email_type").using("btree", table.emailType.asc().nullsLast().op("text_ops")),
+	index("idx_email_logs_post_id").using("btree", table.postId.asc().nullsLast().op("int4_ops")),
+	index("idx_email_logs_recipient").using("btree", table.recipientEmail.asc().nullsLast().op("text_ops")),
+	index("idx_email_logs_sender").using("btree", table.senderEmail.asc().nullsLast().op("text_ops")),
+	foreignKey({
+			columns: [table.postId],
+			foreignColumns: [posts.id],
+			name: "email_logs_post_id_fk"
+		}),
+	foreignKey({
+			columns: [table.userId],
+			foreignColumns: [users.id],
+			name: "email_logs_user_id_fk"
+		}),
+]);
+
 export const couponCodes = pgTable("coupon_codes", {
 	id: serial().primaryKey().notNull(),
 	code: varchar({ length: 50 }).notNull(),
@@ -179,17 +206,53 @@ export const couponCodes = pgTable("coupon_codes", {
 	unique("coupon_codes_code_unique").on(table.code),
 ]);
 
-export const paymentConfigs = pgTable("payment_configs", {
+export const adminAnalytics = pgTable("admin_analytics", {
 	id: serial().primaryKey().notNull(),
-	basePriceFirst200: integer("base_price_first_200").default(5000).notNull(),
-	additionalPricePer20Chars: integer("additional_price_per_20_chars").default(500).notNull(),
-	largeFontMultiplier: numeric("large_font_multiplier", { precision: 3, scale:  2 }).default('1.20').notNull(),
-	visibility2WeeksMultiplier: numeric("visibility_2_weeks_multiplier", { precision: 3, scale:  2 }).default('1.00').notNull(),
-	visibility3WeeksMultiplier: numeric("visibility_3_weeks_multiplier", { precision: 3, scale:  2 }).default('1.50').notNull(),
-	visibility4WeeksMultiplier: numeric("visibility_4_weeks_multiplier", { precision: 3, scale:  2 }).default('2.00').notNull(),
+	eventType: analyticsEventType("event_type").notNull(),
+	userId: varchar("user_id", { length: 255 }),
+	sessionId: varchar("session_id", { length: 100 }),
+	pagePath: varchar("page_path", { length: 200 }),
+	metadata: jsonb(),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
-	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
-});
+}, (table) => [
+	index("idx_admin_analytics_created_at").using("btree", table.createdAt.asc().nullsLast().op("timestamp_ops")),
+	index("idx_admin_analytics_user_id").using("btree", table.userId.asc().nullsLast().op("text_ops")),
+]);
+
+export const dailyAdminStats = pgTable("daily_admin_stats", {
+	id: serial().primaryKey().notNull(),
+	date: timestamp({ mode: 'string' }).notNull(),
+	adSubmissions: integer("ad_submissions").default(0).notNull(),
+	adApprovals: integer("ad_approvals").default(0).notNull(),
+	paymentSuccessRate: numeric("payment_success_rate", { precision: 5, scale:  2 }).default('0.00').notNull(),
+	uniqueEmailSenders: integer("unique_email_senders").default(0).notNull(),
+	uniqueEmailRecipients: integer("unique_email_recipients").default(0).notNull(),
+	duration2Weeks: integer("duration_2weeks").default(0).notNull(),
+	duration3Weeks: integer("duration_3weeks").default(0).notNull(),
+	duration4Weeks: integer("duration_4weeks").default(0).notNull(),
+	fontDefault: integer("font_default").default(0).notNull(),
+	fontLarge: integer("font_large").default(0).notNull(),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	index("idx_daily_admin_stats_date").using("btree", table.date.asc().nullsLast().op("timestamp_ops")),
+	unique("unique_daily_admin_stats_date").on(table.date),
+]);
+
+export const dataEntryStats = pgTable("data_entry_stats", {
+	id: serial().primaryKey().notNull(),
+	employeeId: varchar("employee_id", { length: 255 }).notNull(),
+	date: timestamp({ mode: 'string' }).notNull(),
+	postsCreated: integer("posts_created").default(0).notNull(),
+	postsApproved: integer("posts_approved").default(0).notNull(),
+	postsRejected: integer("posts_rejected").default(0).notNull(),
+	postsEdited: integer("posts_edited").default(0).notNull(),
+	totalCharacters: integer("total_characters").default(0).notNull(),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	index("idx_data_entry_stats_date").using("btree", table.date.asc().nullsLast().op("timestamp_ops")),
+	index("idx_data_entry_stats_employee_date").using("btree", table.employeeId.asc().nullsLast().op("text_ops"), table.date.asc().nullsLast().op("timestamp_ops")),
+	index("idx_data_entry_stats_employee_id").using("btree", table.employeeId.asc().nullsLast().op("text_ops")),
+]);
 
 export const paymentTransactions = pgTable("payment_transactions", {
 	id: serial().primaryKey().notNull(),
@@ -205,13 +268,111 @@ export const paymentTransactions = pgTable("payment_transactions", {
 	finalAmount: integer("final_amount").notNull(),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
+	razorpayOrderId: varchar("razorpay_order_id", { length: 255 }),
 }, (table) => [
 	index("idx_payment_transactions_post_id").using("btree", table.postId.asc().nullsLast().op("int4_ops")),
+	index("idx_payment_transactions_razorpay_order_id").using("btree", table.razorpayOrderId.asc().nullsLast().op("text_ops")),
 	index("idx_payment_transactions_razorpay_payment_link_id").using("btree", table.razorpayPaymentLinkId.asc().nullsLast().op("text_ops")),
 	index("idx_payment_transactions_status").using("btree", table.status.asc().nullsLast().op("text_ops")),
 ]);
 
-// Search Synonym Dictionary Tables
+export const posts = pgTable("posts", {
+	id: serial().primaryKey().notNull(),
+	email: varchar({ length: 255 }).notNull(),
+	content: text().notNull(),
+	userId: integer("user_id"),
+	lookingFor: lookingFor("looking_for"),
+	expiresAt: timestamp("expires_at", { mode: 'string' }),
+	fontSize: fontSize("font_size").default('default'),
+	bgColor: varchar("bg_color", { length: 50 }),
+	status: status().default('pending'),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+	createdByAdminId: integer("created_by_admin_id"),
+	paymentTransactionId: integer("payment_transaction_id"),
+	baseAmount: integer("base_amount"),
+	finalAmount: integer("final_amount"),
+	couponCode: varchar("coupon_code", { length: 50 }),
+	duration: integer().default(14),
+	icon: varchar({ length: 50 }),
+	publishedAt: timestamp("published_at", { mode: 'string' }),
+	previousPostId: integer("previous_post_id"),
+	classificationId: integer("classification_id"),
+}, (table) => [
+	index("idx_posts_classification_id").using("btree", table.classificationId.asc().nullsLast().op("int4_ops")),
+	index("idx_posts_previous_post_id").using("btree", table.previousPostId.asc().nullsLast().op("int4_ops")),
+	foreignKey({
+			columns: [table.userId],
+			foreignColumns: [users.id],
+			name: "posts_user_id_users_id_fk"
+		}),
+	foreignKey({
+			columns: [table.paymentTransactionId],
+			foreignColumns: [paymentTransactions.id],
+			name: "posts_payment_transaction_id_fkey"
+		}),
+	foreignKey({
+			columns: [table.previousPostId],
+			foreignColumns: [table.id],
+			name: "posts_previous_post_id_fkey"
+		}),
+	foreignKey({
+			columns: [table.classificationId],
+			foreignColumns: [classificationOptions.id],
+			name: "posts_classification_id_fkey"
+		}),
+]);
+
+export const classificationCategories = pgTable("classification_categories", {
+	id: serial().primaryKey().notNull(),
+	name: varchar({ length: 100 }).notNull(),
+	displayName: varchar("display_name", { length: 100 }).notNull(),
+	order: integer().default(0).notNull(),
+	isActive: boolean("is_active").default(true).notNull(),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	unique("classification_categories_name_unique").on(table.name),
+]);
+
+export const classificationOptions = pgTable("classification_options", {
+	id: serial().primaryKey().notNull(),
+	categoryId: integer("category_id").notNull(),
+	name: varchar({ length: 100 }).notNull(),
+	displayName: varchar("display_name", { length: 100 }).notNull(),
+	forBride: boolean("for_bride").default(true).notNull(),
+	forGroom: boolean("for_groom").default(true).notNull(),
+	order: integer().default(0).notNull(),
+	isActive: boolean("is_active").default(true).notNull(),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	index("idx_classification_options_category_id").using("btree", table.categoryId.asc().nullsLast().op("int4_ops")),
+	foreignKey({
+			columns: [table.categoryId],
+			foreignColumns: [classificationCategories.id],
+			name: "classification_options_category_id_fk"
+		}).onDelete("cascade"),
+]);
+
+export const postAiClassifications = pgTable("post_ai_classifications", {
+	id: serial().primaryKey().notNull(),
+	postId: integer("post_id").notNull(),
+	classificationOptionId: integer("classification_option_id").notNull(),
+	confidence: real().default(0).notNull(),
+	evidence: text(),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	index("idx_post_ai_classifications_post_id").using("btree", table.postId.asc().nullsLast().op("int4_ops")),
+	foreignKey({
+			columns: [table.postId],
+			foreignColumns: [posts.id],
+			name: "post_ai_classifications_post_id_fk"
+		}).onDelete("cascade"),
+	foreignKey({
+			columns: [table.classificationOptionId],
+			foreignColumns: [classificationOptions.id],
+			name: "post_ai_classifications_option_id_fk"
+		}).onDelete("cascade"),
+]);
+
 export const searchSynonymGroups = pgTable("search_synonym_groups", {
 	id: serial().primaryKey().notNull(),
 	name: varchar({ length: 100 }).notNull(),
@@ -228,11 +389,11 @@ export const searchSynonymWords = pgTable("search_synonym_words", {
 	word: varchar({ length: 100 }).notNull(),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
-	foreignKey({
-		columns: [table.groupId],
-		foreignColumns: [searchSynonymGroups.id],
-		name: "search_synonym_words_group_id_search_synonym_groups_id_fk"
-	}).onDelete("cascade"),
-	unique("search_synonym_words_word_unique").on(table.word),
 	index("idx_search_synonym_words_word").using("btree", table.word.asc().nullsLast().op("text_ops")),
+	foreignKey({
+			columns: [table.groupId],
+			foreignColumns: [searchSynonymGroups.id],
+			name: "search_synonym_words_group_id_search_synonym_groups_id_fk"
+		}).onDelete("cascade"),
+	unique("search_synonym_words_word_unique").on(table.word),
 ]);

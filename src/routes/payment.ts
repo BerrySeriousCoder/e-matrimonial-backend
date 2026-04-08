@@ -320,4 +320,160 @@ router.get('/config', async (req, res) => {
   }
 });
 
+// GET /api/payment/key - Get Razorpay public key (safe to expose)
+router.get('/key', (req, res) => {
+  res.json({ success: true, key: process.env.RAZORPAY_KEY_ID });
+});
+
+// POST /api/payment/create-order - Create Razorpay Order for checkout flow
+const createOrderSchema = Joi.object({
+  postId: Joi.number().integer().positive().required(),
+});
+router.post('/create-order', sanitizeInput, validate(createOrderSchema), async (req, res) => {
+  try {
+    const { postId } = req.body;
+
+    // Get post details
+    const [post] = await db.select().from(posts).where(eq(posts.id, postId));
+
+    if (!post) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
+    if (post.status !== 'payment_pending') {
+      return res.status(400).json({
+        success: false,
+        message: 'Post is not in payment pending status'
+      });
+    }
+
+    // Calculate payment amount server-side (never trust client)
+    const duration = (post.duration as 14 | 21 | 28) || 14;
+    const calculation = await calculatePaymentAmount(
+      post.content,
+      post.fontSize as 'default' | 'large',
+      duration,
+      post.couponCode || undefined,
+      post.icon || undefined,
+      post.bgColor || undefined
+    );
+
+    // Create Razorpay Order
+    const order = await RazorpayService.createOrder(
+      calculation.finalAmount,
+      post.id
+    );
+
+    // Create payment transaction record
+    await db.insert(paymentTransactions).values({
+      postId: post.id,
+      amount: calculation.subtotal,
+      finalAmount: calculation.finalAmount,
+      couponCode: post.couponCode,
+      discountAmount: calculation.discountAmount,
+      razorpayOrderId: order.id,
+      status: 'pending',
+    });
+
+    // Update post with payment amounts
+    await db.update(posts)
+      .set({
+        baseAmount: calculation.subtotal,
+        finalAmount: calculation.finalAmount,
+      })
+      .where(eq(posts.id, postId));
+
+    res.json({
+      success: true,
+      orderId: order.id,
+      amount: calculation.finalAmount * 100, // paise for Razorpay Checkout
+      currency: 'INR',
+      key: process.env.RAZORPAY_KEY_ID,
+    });
+  } catch (error) {
+    console.error('Create order error:', error);
+    res.status(500).json({ success: false, message: 'Failed to create payment order' });
+  }
+});
+
+// POST /api/payment/verify-order - Verify Razorpay Checkout payment signature
+const verifyOrderSchema = Joi.object({
+  razorpay_order_id: Joi.string().required(),
+  razorpay_payment_id: Joi.string().required(),
+  razorpay_signature: Joi.string().required(),
+  postId: Joi.number().integer().positive().required(),
+});
+router.post('/verify-order', sanitizeInput, validate(verifyOrderSchema), async (req, res) => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, postId } = req.body;
+
+    // Verify signature server-side
+    const isValid = RazorpayService.verifyOrderPaymentSignature(
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature
+    );
+
+    if (!isValid) {
+      console.error('Invalid order payment signature');
+      return res.status(400).json({ success: false, message: 'Payment verification failed' });
+    }
+
+    // Find the payment transaction by order ID
+    const [paymentTransaction] = await db.select()
+      .from(paymentTransactions)
+      .where(eq(paymentTransactions.razorpayOrderId, razorpay_order_id));
+
+    if (!paymentTransaction) {
+      return res.status(404).json({ success: false, message: 'Payment transaction not found' });
+    }
+
+    // Update payment transaction
+    await db.update(paymentTransactions)
+      .set({
+        razorpayPaymentId: razorpay_payment_id,
+        status: 'completed',
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(paymentTransactions.id, paymentTransaction.id));
+
+    // Get the post to compute expiresAt
+    const [post] = await db.select().from(posts).where(eq(posts.id, postId));
+    if (!post) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
+    // Directly publish the post (no admin review needed — user paid upfront)
+    const duration = post.duration || 14;
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + duration);
+
+    await db.update(posts)
+      .set({
+        status: 'published',
+        publishedAt: new Date().toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        paymentTransactionId: paymentTransaction.id,
+      })
+      .where(eq(posts.id, postId));
+
+    // Update coupon usage count if applicable
+    if (paymentTransaction.couponCode) {
+      const [coupon] = await db.select().from(couponCodes).where(sql`LOWER(${couponCodes.code}) = LOWER(${paymentTransaction.couponCode})`);
+      if (coupon) {
+        await db.update(couponCodes)
+          .set({
+            usedCount: (coupon.usedCount || 0) + 1
+          })
+          .where(eq(couponCodes.id, coupon.id));
+      }
+    }
+
+    res.json({ success: true, message: 'Payment verified successfully' });
+  } catch (error) {
+    console.error('Verify order error:', error);
+    res.status(500).json({ success: false, message: 'Payment verification failed' });
+  }
+});
+
 export default router;
