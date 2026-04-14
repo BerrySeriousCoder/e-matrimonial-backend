@@ -6,6 +6,8 @@ import { calculatePaymentAmount, getPaymentConfig } from '../utils/paymentCalcul
 import RazorpayService from '../utils/razorpayService';
 import { sanitizeInput, validate } from '../middleware/validation';
 import Joi from 'joi';
+import { sendEmail } from '../utils/sendEmail';
+import { tmplPublished } from '../utils/emailTemplates';
 
 const router = express.Router();
 
@@ -467,6 +469,26 @@ router.post('/verify-order', sanitizeInput, validate(verifyOrderSchema), async (
           })
           .where(eq(couponCodes.id, coupon.id));
       }
+    }
+
+    // Send "ad is live" confirmation email with link to the post
+    try {
+      const { html, text } = tmplPublished({
+        email: post.email,
+        expiresAt,
+        postId,
+        content: post.content,
+      });
+      await sendEmail({
+        to: post.email,
+        subject: '[E‑Matrimonials] Your ad is now live!',
+        text,
+        html,
+        disableUnsubscribe: true,
+        logMetadata: { senderEmail: 'system', postId, emailType: 'payment' },
+      });
+    } catch (emailError) {
+      console.error('Error sending ad published email:', emailError);
     }
 
     res.json({ success: true, message: 'Payment verified successfully' });
