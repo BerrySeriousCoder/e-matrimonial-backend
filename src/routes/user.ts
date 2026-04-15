@@ -226,8 +226,13 @@ router.post('/selected-profiles', requireAuth, sanitizeInput, validate(schemas.u
 });
 
 // GET /api/user/selected-profiles
+// Pass ?cleanup=true to also delete expired/unavailable selection links from the DB.
+// Without cleanup, the endpoint returns active profiles + expiredCount but preserves
+// the stale links so the frontend can show the notification on the next tab-switch.
 router.get('/selected-profiles', requireAuth, async (req: AuthRequest, res: Response) => {
   const userId = req.user!.userId;
+  const shouldCleanup = req.query.cleanup === 'true';
+
   // Get selected profile IDs
   const selected = await db.select().from(userSelectedProfiles).where(eq(userSelectedProfiles.userId, userId));
   const profileIds = selected.map(s => s.profileId);
@@ -260,9 +265,10 @@ router.get('/selected-profiles', requireAuth, async (req: AuthRequest, res: Resp
     const foundIds = allProfiles.map(p => p.id);
     const deletedFromDb = profileIds.filter(id => !foundIds.includes(id));
 
-    // Clean up expired/deleted selections from user's saved list
     const allExpiredIds = [...expiredProfileIds, ...deletedFromDb];
-    if (allExpiredIds.length > 0) {
+
+    // Only clean up when the frontend explicitly requests it (after showing the toast)
+    if (shouldCleanup && allExpiredIds.length > 0) {
       await db.delete(userSelectedProfiles)
         .where(and(
           eq(userSelectedProfiles.userId, userId),
@@ -277,7 +283,7 @@ router.get('/selected-profiles', requireAuth, async (req: AuthRequest, res: Resp
   res.json({
     success: true,
     selected: profiles,
-    expiredCount // Number of profiles that were expired/deleted and removed
+    expiredCount // Number of profiles that are expired/deleted/unavailable
   });
 });
 

@@ -257,6 +257,11 @@ export const schemas = {
     'string.textLength': 'Content text length must be between 10 and 1000 characters (currently {{#textLength}})'
   }),
 
+  // Validate post IDs (for guest profile validation)
+  validateIds: Joi.object({
+    ids: Joi.array().items(Joi.number().integer().positive()).min(1).max(50).required()
+  }),
+
 };
 
 // Export allowed colors and icons for use in other parts of the application

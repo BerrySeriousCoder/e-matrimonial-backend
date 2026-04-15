@@ -415,4 +415,29 @@ router.post('/authenticated', userAuth, sanitizeInput, validate(schemas.createAu
   });
 });
 
+// POST /api/posts/validate-ids
+// Body: { ids: number[] }
+// Returns which IDs are still published and not expired (for guest profile validation)
+router.post('/validate-ids', validate(schemas.validateIds), async (req, res) => {
+  const { ids } = req.body as { ids: number[] };
+
+  if (ids.length === 0) {
+    return res.json({ valid: [], invalidCount: 0 });
+  }
+
+  const now = new Date().toISOString();
+  const activeProfiles = await db.select({ id: posts.id })
+    .from(posts)
+    .where(and(
+      inArray(posts.id, ids),
+      eq(posts.status, 'published'),
+      gt(posts.expiresAt, now)
+    ));
+
+  const validIds = activeProfiles.map(p => p.id);
+  const invalidCount = ids.length - validIds.length;
+
+  res.json({ valid: validIds, invalidCount });
+});
+
 export default router; 
