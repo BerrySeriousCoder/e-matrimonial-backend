@@ -91,6 +91,7 @@ export const posts = pgTable("posts", {
 	finalAmount: integer("final_amount"),
 	couponCode: varchar("coupon_code", { length: 50 }),
 	publishedAt: timestamp("published_at", { mode: 'string' }),
+	expiryReminderSent: boolean("expiry_reminder_sent").default(false).notNull(),
 	previousPostId: integer("previous_post_id"),
 	classificationId: integer("classification_id"),
 }, (table) => [

@@ -14,7 +14,8 @@
     "db:reset-expiry": "ts-node src/db/resetExpiry.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "test:expiry": "ts-node src/db/testExpiryReminder.ts"
   },
   "keywords": [],
   "author": "",
@@ -26,6 +27,7 @@
     "@langchain/core": "^1.1.39",
     "@langchain/openai": "^1.4.2",
     "@types/express-rate-limit": "^6.0.2",
+    "@types/node-cron": "^3.0.11",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
@@ -38,6 +40,7 @@
     "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
+    "node-cron": "^4.2.1",
     "pg": "^8.16.3",
     "postgres": "^3.4.7",
     "razorpay": "^2.9.6",

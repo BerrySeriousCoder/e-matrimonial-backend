@@ -4,7 +4,7 @@ import { paymentTransactions, posts, couponCodes } from '../db/schema';
 import { eq, sql } from 'drizzle-orm';
 import RazorpayService from '../utils/razorpayService';
 import { sendEmail } from '../utils/sendEmail';
-import { tmplPublished } from '../utils/emailTemplates';
+import { tmplPublished, tmplAdExtended } from '../utils/emailTemplates';
 import { AnalyticsService } from '../services/analyticsService';
 
 const router = express.Router();
@@ -405,6 +405,51 @@ async function handlePaymentCaptured(payload: any) {
           paymentTransactionId: paymentTransaction.id,
         })
         .where(eq(posts.id, postId));
+    }
+
+    // Check if this is an extension payment.
+    // Extension orders are created when the post is already published/expired (not payment_pending).
+    // Normal new-ad orders are created when the post is in payment_pending status.
+    const isExtension = post.status === 'published' || post.status === 'expired';
+
+    // If this is an extension payment, extend the post
+    if (isExtension && (post.status === 'published' || post.status === 'expired')) {
+      const now = new Date();
+      const currentExpiry = post.expiresAt ? new Date(post.expiresAt) : now;
+      const baseTime = currentExpiry > now ? currentExpiry : now;
+      const newExpiresAt = new Date(baseTime.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+      await db.update(posts)
+        .set({
+          expiresAt: newExpiresAt.toISOString(),
+          status: 'published',
+          expiryReminderSent: false,
+        })
+        .where(eq(posts.id, postId));
+
+      // Send extension confirmation email
+      try {
+        console.log('📧 Sending ad extended email to:', post.email);
+        const { html, text } = tmplAdExtended({
+          email: post.email,
+          postId: postId,
+          content: post.content,
+          newExpiresAt,
+        });
+        await sendEmail({
+          to: post.email,
+          subject: '[E‑Matrimonials] Your ad has been extended!',
+          text,
+          html,
+          disableUnsubscribe: true,
+          logMetadata: { senderEmail: 'system', postId, emailType: 'ad_extended' },
+        });
+        console.log('✅ Ad extended email sent to:', post.email);
+      } catch (emailError) {
+        console.error('❌ Error sending ad extended email:', emailError);
+      }
+
+      return; // Skip normal publish email
     }
 
     // Update coupon usage count if applicable

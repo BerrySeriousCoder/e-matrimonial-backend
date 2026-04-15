@@ -19,6 +19,9 @@ import emailAuditRouter from './routes/emailAudit';
 import unsubscribeRouter from './routes/unsubscribe';
 import classificationsRouter from './routes/classifications';
 import aiSearchRouter from './routes/aiSearch';
+import adExtendRouter from './routes/adExtend';
+import cron from 'node-cron';
+import { CronService } from './services/cronService';
 
 // Security imports
 import {
@@ -130,6 +133,9 @@ app.use('/api/synonyms', GL, synonymsRouter);
 app.use('/api/payment', GL, paymentRouter);
 app.use('/api/admin/payment', ADM, adminPaymentRouter);
 
+// Ad extension routes (public, token-protected)
+app.use('/api/ad-extend', GL, adExtendRouter);
+
 // Analytics routes
 app.use('/api/analytics', ADM, analyticsRouter);
 
@@ -151,4 +157,12 @@ app.listen(PORT, () => {
   console.log(`   - Input validation`);
   console.log(`   - Request size limiting`);
   console.log(`   - Error handling`);
+
+  // Schedule cron jobs
+  // Check for expiring ads every hour (at minute 0)
+  cron.schedule('0 * * * *', async () => {
+    console.log('⏰ Running expiring ads check...');
+    await CronService.checkExpiringAds();
+  });
+  console.log('⏰ Cron job scheduled: expiring ads check (hourly)');
 }); 

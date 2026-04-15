@@ -277,3 +277,108 @@ If you believe this was done in error or have any questions, please contact our 
 Thank you for using E-Matrimonials.`;
   return brandWrapper(subject, bodyHtml, bodyText);
 }
+
+export function tmplExpiryReminder(params: {
+  email: string;
+  postId: number;
+  content: string;
+  expiresAt: Date;
+  extendUrl: string;
+}) {
+  const subject = 'Your ad is expiring soon — extend it now!';
+  const siteUrl = process.env.CLIENT_BASE_URL || process.env.FRONTEND_URL || 'https://e-matrimonials.com';
+  const viewAdUrl = `${siteUrl}/?highlight=${params.postId}`;
+  
+  // Strip HTML tags and truncate content for preview
+  const contentPreview = params.content
+    ? params.content.replace(/<[^>]*>/g, '').slice(0, 200) + (params.content.length > 200 ? '…' : '')
+    : '';
+  const safePreview = contentPreview.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // Calculate time remaining
+  const now = new Date();
+  const diff = params.expiresAt.getTime() - now.getTime();
+  const hoursLeft = Math.max(0, Math.floor(diff / (1000 * 60 * 60)));
+  const timeLeftText = hoursLeft > 24
+    ? `${Math.floor(hoursLeft / 24)} day(s) and ${hoursLeft % 24} hour(s)`
+    : `${hoursLeft} hour(s)`;
+
+  const bodyHtml = `
+    <p>Hello ${params.email},</p>
+    <p style="font-size:16px;color:#dc2626;font-weight:600;margin:16px 0;">⏰ Your matrimonial advertisement is expiring in ${timeLeftText}!</p>
+    ${contentPreview ? `
+    <div style="background:#f9fafb;border:1px solid #eef2f7;border-radius:8px;padding:16px;margin:16px 0;">
+      <div style="color:#475467;font-size:12px;margin-bottom:8px;font-weight:600;">Your Ad Preview</div>
+      <div style="color:#101828;font-size:14px;line-height:1.6;">${safePreview}</div>
+    </div>
+    ` : ''}
+    <p><strong>Expires on:</strong> ${params.expiresAt.toDateString()} at ${params.expiresAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
+    <p>Don't let your ad go offline! Extend it for 2 more weeks with a single click:</p>
+    <div style="margin:24px 0;text-align:center;">
+      <a href="${params.extendUrl}" 
+         style="background-color:#059669;color:#ffffff;padding:14px 32px;text-decoration:none;border-radius:8px;display:inline-block;font-weight:600;font-size:16px;">
+        Extend Your Ad — 2 More Weeks
+      </a>
+    </div>
+    <p style="color:#667085;font-size:13px;margin-top:16px;">Click the button above to review your ad and extend its visibility. You can also <a href="${viewAdUrl}" style="color:#6366f1;">view your current ad here</a>.</p>
+    <p>Thank you for using E‑Matrimonials.</p>
+  `;
+  const bodyText = `Hello ${params.email},
+
+Your matrimonial advertisement is expiring in ${timeLeftText}!
+${contentPreview ? `\nYour Ad Preview:\n${contentPreview}\n` : ''}
+Expires on: ${params.expiresAt.toDateString()}
+
+Extend your ad for 2 more weeks: ${params.extendUrl}
+View your ad: ${viewAdUrl}
+
+Thank you for using E-Matrimonials.`;
+  return brandWrapper(subject, bodyHtml, bodyText, false);
+}
+
+export function tmplAdExtended(params: {
+  email: string;
+  postId: number;
+  content?: string;
+  newExpiresAt: Date;
+}) {
+  const subject = 'Your ad has been extended!';
+  const siteUrl = process.env.CLIENT_BASE_URL || process.env.FRONTEND_URL || 'https://e-matrimonials.com';
+  const viewAdUrl = `${siteUrl}/?highlight=${params.postId}`;
+
+  // Strip HTML tags and truncate content for preview
+  const contentPreview = params.content
+    ? params.content.replace(/<[^>]*>/g, '').slice(0, 200) + (params.content.length > 200 ? '…' : '')
+    : '';
+  const safePreview = contentPreview.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  const bodyHtml = `
+    <p>Hello ${params.email},</p>
+    <p style="font-size:18px;color:#059669;font-weight:600;margin:16px 0;">🎉 Great news! Your ad has been extended for 2 more weeks!</p>
+    ${contentPreview ? `
+    <div style="background:#f9fafb;border:1px solid #eef2f7;border-radius:8px;padding:16px;margin:16px 0;">
+      <div style="color:#475467;font-size:12px;margin-bottom:8px;font-weight:600;">Your Ad Preview</div>
+      <div style="color:#101828;font-size:14px;line-height:1.6;">${safePreview}</div>
+    </div>
+    ` : ''}
+    <p><strong>New expiry date:</strong> ${params.newExpiresAt.toDateString()}</p>
+    <div style="margin:24px 0;text-align:center;">
+      <a href="${viewAdUrl}" 
+         style="background-color:#1f2937;color:#ffffff;padding:14px 32px;text-decoration:none;border-radius:8px;display:inline-block;font-weight:600;font-size:16px;">
+        View Your Ad
+      </a>
+    </div>
+    <p style="color:#667085;font-size:13px;margin-top:16px;">Your ad is live and visible to all users. Share this link with family and friends!</p>
+    <p>Thank you for using E‑Matrimonials.</p>
+  `;
+  const bodyText = `Hello ${params.email},
+
+Great news! Your ad has been extended for 2 more weeks!
+${contentPreview ? `\nYour Ad Preview:\n${contentPreview}\n` : ''}
+New expiry date: ${params.newExpiresAt.toDateString()}
+
+View your ad: ${viewAdUrl}
+
+Thank you for using E-Matrimonials.`;
+  return brandWrapper(subject, bodyHtml, bodyText, false);
+}
