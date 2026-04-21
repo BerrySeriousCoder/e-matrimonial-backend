@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { ChatOpenAI } from '@langchain/openai';
 import { z } from 'zod';
 import { db } from '../db';
-import { posts, postAiClassifications, classificationOptions, classificationCategories } from '../db/schema';
+import { posts, postAiClassifications, classificationOptions, classificationCategories, searchSynonymGroups, searchSynonymWords } from '../db/schema';
 import { eq, and, gt, inArray, desc, asc, sql, or } from 'drizzle-orm';
 import { stripHtml } from '../utils/htmlUtils';
 import dotenv from 'dotenv';
@@ -36,9 +36,37 @@ async function loadTaxonomy(): Promise<TaxonomyItem[]> {
   return options;
 }
 
+async function loadSynonymDictionary(): Promise<Map<number, { name: string; words: string[] }>> {
+  const words = await db
+    .select({
+      groupId: searchSynonymGroups.id,
+      groupName: searchSynonymGroups.name,
+      word: searchSynonymWords.word,
+    })
+    .from(searchSynonymWords)
+    .innerJoin(searchSynonymGroups, eq(searchSynonymWords.groupId, searchSynonymGroups.id))
+    .where(eq(searchSynonymGroups.isActive, true));
+
+  const groups = new Map<number, { name: string; words: string[] }>();
+  for (const w of words) {
+    if (!groups.has(w.groupId)) groups.set(w.groupId, { name: w.groupName, words: [] });
+    groups.get(w.groupId)!.words.push(w.word);
+  }
+  return groups;
+}
+
+function buildSynonymDictionaryString(dict: Map<number, { name: string; words: string[] }>): string {
+  const lines: string[] = [];
+  for (const [id, group] of dict) {
+    lines.push(`${group.name} (id:${id}): ${group.words.join(', ')}`);
+  }
+  return lines.join('\n');
+}
+
 const SearchIntent = z.object({
   classificationIds: z.array(z.number()).describe('IDs of matching classification options from the taxonomy'),
-  keywords: z.array(z.string()).describe('Additional keywords to search in post content that are not covered by classifications'),
+  synonymGroupIds: z.array(z.number()).describe('IDs of synonym groups whose words should be included in the search to expand coverage'),
+  keywords: z.array(z.string()).describe('Additional keywords to search in post content that are NOT covered by classifications or synonym groups'),
   lookingFor: z.enum(['bride', 'groom', 'any']).describe('Whether the user is looking for a bride, groom, or either'),
   summary: z.string().describe('Brief summary of what the user is looking for'),
 });
@@ -56,7 +84,10 @@ router.post('/', async (req, res) => {
       return res.status(503).json({ success: false, message: 'AI search is not configured yet' });
     }
 
-    const taxonomy = await loadTaxonomy();
+    const [taxonomy, synonymDict] = await Promise.all([
+      loadTaxonomy(),
+      loadSynonymDictionary(),
+    ]);
 
     const taxonomyStr = taxonomy
       .reduce((acc: string[], item) => {
@@ -70,6 +101,8 @@ router.post('/', async (req, res) => {
         return acc;
       }, [])
       .join('\n');
+
+    const synonymStr = buildSynonymDictionaryString(synonymDict);
 
     const model = new ChatOpenAI({
       modelName: 'gpt-4o-mini',
@@ -85,15 +118,20 @@ router.post('/', async (req, res) => {
         content: `You are a search assistant for an Indian matrimonial website. Parse the user's natural language query to identify:
 
 1. Classification IDs from the taxonomy that match their requirements
-2. Additional keywords not covered by classifications (like city names, specific qualifications, etc.)
-3. Whether they are looking for a bride, groom, or either
+2. Synonym group IDs from the synonym dictionary that relate to the query
+3. Additional keywords NOT covered by classifications or synonym groups
+4. Whether they are looking for a bride, groom, or either
 
 TAXONOMY:
 ${taxonomyStr}
 
+SYNONYM DICTIONARY (use these to expand search coverage):
+${synonymStr}
+
 RULES:
 - Match classifications generously but accurately (e.g., "Agarwal" matches both caste and community options)
-- Extract keywords for specifics not in the taxonomy (e.g., "Delhi", "IIT", "fair complexion")
+- If the user's query relates to any synonym group, include that group's ID in synonymGroupIds (e.g., "UK" matches the group containing "uk, london, england")
+- Use keywords ONLY for terms not covered by taxonomy or synonym groups
 - Infer lookingFor from context: "boy" / "groom" / "ladka" = groom, "girl" / "bride" / "ladki" = bride
 - If unclear, set lookingFor to "any"`,
       },
@@ -146,6 +184,22 @@ RULES:
       postIds = Array.from(idSet);
     }
 
+    // Expand synonym groups into search terms
+    const synonymSearchTerms: string[] = [];
+    const validSynonymGroupIds = intent.synonymGroupIds?.filter((id) => synonymDict.has(id)) || [];
+    for (const gid of validSynonymGroupIds) {
+      const group = synonymDict.get(gid);
+      if (group) synonymSearchTerms.push(...group.words);
+    }
+
+    // Build synonym LIKE conditions (OR within group, AND between groups is handled by overall query)
+    let synonymConditions: any[] = [];
+    if (synonymSearchTerms.length > 0) {
+      synonymConditions = [sql`(${synonymSearchTerms
+        .map(term => sql`LOWER(REGEXP_REPLACE(${posts.content}, '<[^>]*>', '', 'g')) LIKE ${`%${term.toLowerCase()}%`} OR LOWER(${posts.email}) LIKE ${`%${term.toLowerCase()}%`}`)
+        .reduce((acc, c) => sql`${acc} OR ${c}`)})`];
+    }
+
     let keywordConditions: any[] = [];
     if (intent.keywords.length > 0) {
       keywordConditions = intent.keywords.map((kw) => {
@@ -154,14 +208,17 @@ RULES:
       });
     }
 
+    // Merge synonym and keyword conditions
+    const textConditions = [...synonymConditions, ...keywordConditions];
+
     let finalWhere;
 
-    if (postIds.length > 0 && keywordConditions.length > 0) {
+    if (postIds.length > 0 && textConditions.length > 0) {
       finalWhere = and(
         ...whereConditions,
         or(
           inArray(posts.id, postIds),
-          and(...keywordConditions)
+          and(...textConditions)
         )
       );
     } else if (postIds.length > 0) {
@@ -169,10 +226,10 @@ RULES:
         ...whereConditions,
         inArray(posts.id, postIds)
       );
-    } else if (keywordConditions.length > 0) {
+    } else if (textConditions.length > 0) {
       finalWhere = and(
         ...whereConditions,
-        and(...keywordConditions)
+        and(...textConditions)
       );
     } else {
       return res.json({
@@ -181,6 +238,7 @@ RULES:
         total: 0,
         intent: {
           classificationIds: validIds,
+          synonymGroupIds: validSynonymGroupIds,
           keywords: intent.keywords,
           lookingFor: intent.lookingFor,
           summary: intent.summary,
@@ -218,6 +276,7 @@ RULES:
       intent: {
         classificationIds: validIds,
         classificationNames: matchedClassNames,
+        synonymGroupIds: validSynonymGroupIds,
         keywords: intent.keywords,
         lookingFor: intent.lookingFor,
         summary: intent.summary,
