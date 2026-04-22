@@ -189,7 +189,10 @@ RULES:
     const validSynonymGroupIds = intent.synonymGroupIds?.filter((id) => synonymDict.has(id)) || [];
     for (const gid of validSynonymGroupIds) {
       const group = synonymDict.get(gid);
-      if (group) synonymSearchTerms.push(...group.words);
+      if (group) {
+        synonymSearchTerms.push(group.name.toLowerCase());
+        synonymSearchTerms.push(...group.words);
+      }
     }
 
     // Build synonym LIKE conditions (OR within group, AND between groups is handled by overall query)
