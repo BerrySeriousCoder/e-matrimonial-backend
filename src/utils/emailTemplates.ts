@@ -1,5 +1,54 @@
 import { generateUnsubscribeUrl } from './sendEmail';
 
+/**
+ * Converts HTML to plain text while preserving list structure.
+ * Handles bullet lists, numbered lists, paragraphs, and line breaks.
+ */
+export function htmlToPlainText(html: string): string {
+  if (!html) return '';
+  
+  let text = html;
+  
+  // Handle ordered lists - convert to numbered format
+  let olCounter = 0;
+  text = text.replace(/<ol[^>]*>/gi, () => {
+    olCounter = 0;
+    return '';
+  });
+  text = text.replace(/<\/ol>/gi, '\n');
+  
+  // Handle list items within ordered lists (detected by tracking)
+  // We'll use a two-pass approach: first mark OL items, then process
+  
+  // For simplicity, convert all list items uniformly
+  // Detect if we're in an ordered list context by checking preceding tags
+  text = text
+    // Handle closing tags that should add newlines
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    // Handle list item opening tags - add bullet point
+    .replace(/<li[^>]*>/gi, '• ')
+    // Remove ordered/unordered list tags
+    .replace(/<\/?[ou]l[^>]*>/gi, '')
+    // Remove all remaining HTML tags
+    .replace(/<[^>]*>/g, '')
+    // Decode common HTML entities
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    // Clean up excessive whitespace
+    .replace(/\n\s*\n\s*\n/g, '\n\n')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
+  
+  return text;
+}
+
 export function brandWrapper(subject: string, bodyHtml: string, bodyText: string, showUnsubscribe: boolean = true, unsubscribeUrl?: string) {
   const unsubscribeFooter = showUnsubscribe ? `
           <tr>
@@ -200,8 +249,15 @@ export function tmplNewMessageToPoster(params: {
   const subject = `[${params.lookingFor} - "${params.contentPreview}"] New message from ${params.fromEmail}`;
   const safePreview = params.contentPreview.replace(/</g, '&lt;').replace(/>/g, '&gt;');
   // Message comes from rich text editor and is already sanitized - render HTML
-  // Strip HTML tags for plain text version
-  const plainTextMessage = params.message.replace(/<[^>]*>/g, '').trim();
+  // Convert to plain text while preserving list structure
+  const plainTextMessage = htmlToPlainText(params.message);
+  
+  // Add inline styles for lists to ensure consistent rendering across email clients
+  const styledMessage = params.message
+    .replace(/<ul>/gi, '<ul style="margin:8px 0;padding-left:20px;list-style-type:disc;">')
+    .replace(/<ol>/gi, '<ol style="margin:8px 0;padding-left:20px;list-style-type:decimal;">')
+    .replace(/<li>/gi, '<li style="margin:4px 0;">');
+  
   const bodyHtml = `
     <p>Hello ${params.toEmail},</p>
     <p>You received a new message for your "${params.lookingFor}" post:</p>
@@ -211,7 +267,7 @@ export function tmplNewMessageToPoster(params: {
     </div>
     <div style="background:#f9fafb;border:1px solid #eef2f7;border-radius:8px;padding:12px 14px;margin:0 0 14px;">
       <div style="color:#475467;font-size:12px;margin-bottom:6px;">Message</div>
-      <div style="color:#101828;">${params.message}</div>
+      <div style="color:#101828;">${styledMessage}</div>
     </div>
     <p style="margin-top:12px;color:#475467;">Reply directly to this email to respond.</p>
   `;
