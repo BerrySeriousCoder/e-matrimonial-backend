@@ -1,6 +1,6 @@
 import { db } from '../db';
-import { adminAnalytics, dataEntryStats, dailyAdminStats } from '../db/schema';
-import { eq, gte, desc, sql } from 'drizzle-orm';
+import { adminAnalytics, dataEntryStats } from '../db/schema';
+import { desc, sql } from 'drizzle-orm';
 
 export interface AnalyticsEvent {
   eventType: 'ad_submission' | 'ad_approval' | 'ad_rejection' | 'payment_success' | 'payment_failure' | 'email_sent' | 'profile_selection';
@@ -154,81 +154,9 @@ export class AnalyticsService {
     }
   }
 
-  // Get admin analytics data
-  static async getAdminAnalytics(period: 'daily' | 'weekly' | 'monthly', days: number = 30) {
-    try {
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - days);
-
-      if (period === 'daily') {
-        const dailyStats = await db.select()
-          .from(dailyAdminStats)
-          .where(gte(dailyAdminStats.date, startDate.toISOString()))
-          .orderBy(desc(dailyAdminStats.date));
-        
-        // If no daily stats available, calculate from raw events
-        if (dailyStats.length === 0) {
-          console.log('No daily stats found, calculating from raw events');
-          return await this.calculateFromRawEvents(startDate, endDate);
-        }
-        
-        return dailyStats;
-      }
-
-      if (period === 'weekly') {
-        return await db.execute(sql`
-          SELECT 
-            DATE_TRUNC('week', date::timestamp) as week,
-            SUM(ad_submissions) as ad_submissions,
-            SUM(ad_approvals) as ad_approvals,
-            AVG(payment_success_rate) as payment_success_rate,
-            SUM(unique_email_senders) as unique_email_senders,
-            SUM(unique_email_recipients) as unique_email_recipients,
-            SUM(duration_2weeks) as duration_2weeks,
-            SUM(duration_3weeks) as duration_3weeks,
-            SUM(duration_4weeks) as duration_4weeks,
-            SUM(font_default) as font_default,
-            SUM(font_large) as font_large
-          FROM daily_admin_stats 
-          WHERE date >= ${startDate.toISOString()}
-          GROUP BY DATE_TRUNC('week', date::timestamp)
-          ORDER BY week DESC
-        `);
-      }
-
-      if (period === 'monthly') {
-        return await db.execute(sql`
-          SELECT 
-            DATE_TRUNC('month', date::timestamp) as month,
-            SUM(ad_submissions) as ad_submissions,
-            SUM(ad_approvals) as ad_approvals,
-            AVG(payment_success_rate) as payment_success_rate,
-            SUM(unique_email_senders) as unique_email_senders,
-            SUM(unique_email_recipients) as unique_email_recipients,
-            SUM(duration_2weeks) as duration_2weeks,
-            SUM(duration_3weeks) as duration_3weeks,
-            SUM(duration_4weeks) as duration_4weeks,
-            SUM(font_default) as font_default,
-            SUM(font_large) as font_large
-          FROM daily_admin_stats 
-          WHERE date >= ${startDate.toISOString()}
-          GROUP BY DATE_TRUNC('month', date::timestamp)
-          ORDER BY month DESC
-        `);
-      }
-
-      return [];
-    } catch (error) {
-      console.error('Get admin analytics error:', error);
-      throw error;
-    }
-  }
-
   // Get data entry employee performance
   static async getDataEntryStats(employeeId: string, days: number = 30) {
     try {
-      const endDate = new Date();
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
 
@@ -244,61 +172,9 @@ export class AnalyticsService {
     }
   }
 
-  // Calculate analytics from raw events when daily stats are not available
-  static async calculateFromRawEvents(startDate: Date, endDate: Date) {
-    try {
-      const startOfDay = startDate.toISOString();
-      const endOfDay = endDate.toISOString();
-
-      // Get all events in the date range
-      const events = await db.select()
-        .from(adminAnalytics)
-        .where(
-          sql`${adminAnalytics.createdAt} >= ${startOfDay} AND ${adminAnalytics.createdAt} <= ${endOfDay}`
-        );
-
-      // Group events by date
-      const eventsByDate: { [key: string]: any[] } = {};
-      events.forEach(event => {
-        const date = event.createdAt.split('T')[0];
-        if (!eventsByDate[date]) {
-          eventsByDate[date] = [];
-        }
-        eventsByDate[date].push(event);
-      });
-
-      // Calculate stats for each date
-      const dailyStats = Object.keys(eventsByDate).map(date => {
-        const dayEvents = eventsByDate[date];
-        
-        return {
-          id: 0, // Placeholder
-          date: date,
-          adSubmissions: dayEvents.filter(e => e.eventType === 'ad_submission').length,
-          adApprovals: dayEvents.filter(e => e.eventType === 'ad_approval').length,
-          paymentSuccessRate: 0, // Will be calculated separately
-          uniqueEmailSenders: new Set(dayEvents.filter(e => e.eventType === 'email_sent').map(e => (e.metadata as any)?.fromEmail)).size,
-          uniqueEmailRecipients: new Set(dayEvents.filter(e => e.eventType === 'email_sent').map(e => (e.metadata as any)?.toEmail)).size,
-          duration2weeks: dayEvents.filter(e => e.eventType === 'ad_submission' && (e.metadata as any)?.duration === 14).length,
-          duration3weeks: dayEvents.filter(e => e.eventType === 'ad_submission' && (e.metadata as any)?.duration === 21).length,
-          duration4weeks: dayEvents.filter(e => e.eventType === 'ad_submission' && (e.metadata as any)?.duration === 28).length,
-          fontDefault: dayEvents.filter(e => e.eventType === 'ad_submission' && (e.metadata as any)?.fontSize === 'default').length,
-          fontLarge: dayEvents.filter(e => e.eventType === 'ad_submission' && (e.metadata as any)?.fontSize === 'large').length,
-          createdAt: new Date().toISOString()
-        };
-      });
-
-      return dailyStats.sort((a, b) => b.date.localeCompare(a.date));
-    } catch (error) {
-      console.error('Error calculating from raw events:', error);
-      return [];
-    }
-  }
-
   // Get all data entry employees performance (for admin view)
   static async getAllDataEntryStats(days: number = 30) {
     try {
-      const endDate = new Date();
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
 
@@ -319,6 +195,53 @@ export class AnalyticsService {
       `);
     } catch (error) {
       console.error('Get all data entry stats error:', error);
+      throw error;
+    }
+  }
+
+  // Get aggregated analytics stats for a date range (calculated on-demand from raw events)
+  static async getAggregatedStats(startDate: Date, endDate: Date) {
+    try {
+      const startISO = startDate.toISOString();
+      const endISO = endDate.toISOString();
+
+      const result = await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE event_type = 'ad_submission') as ad_submissions,
+          COUNT(*) FILTER (WHERE event_type = 'ad_approval') as ad_approvals,
+          COUNT(*) FILTER (WHERE event_type = 'payment_success') as payment_successes,
+          COUNT(*) FILTER (WHERE event_type = 'payment_failure') as payment_failures,
+          COUNT(DISTINCT CASE WHEN event_type = 'email_sent' THEN metadata->>'fromEmail' END) as unique_email_senders,
+          COUNT(DISTINCT CASE WHEN event_type = 'email_sent' THEN metadata->>'toEmail' END) as unique_email_recipients,
+          COUNT(*) FILTER (WHERE event_type = 'ad_submission' AND (metadata->>'duration')::int = 14) as duration_2weeks,
+          COUNT(*) FILTER (WHERE event_type = 'ad_submission' AND (metadata->>'duration')::int = 21) as duration_3weeks,
+          COUNT(*) FILTER (WHERE event_type = 'ad_submission' AND (metadata->>'duration')::int = 28) as duration_4weeks,
+          COUNT(*) FILTER (WHERE event_type = 'ad_submission' AND metadata->>'fontSize' = 'default') as font_default,
+          COUNT(*) FILTER (WHERE event_type = 'ad_submission' AND metadata->>'fontSize' = 'large') as font_large
+        FROM admin_analytics
+        WHERE created_at >= ${startISO} AND created_at <= ${endISO}
+      `);
+
+      const row = (result.rows && result.rows[0]) || {};
+      const successes = Number(row.payment_successes) || 0;
+      const failures = Number(row.payment_failures) || 0;
+      const totalPayments = successes + failures;
+
+      return {
+        adSubmissions: Number(row.ad_submissions) || 0,
+        adApprovals: Number(row.ad_approvals) || 0,
+        paymentSuccessRate: totalPayments > 0 ? (successes / totalPayments) * 100 : 0,
+        uniqueEmailSenders: Number(row.unique_email_senders) || 0,
+        uniqueEmailRecipients: Number(row.unique_email_recipients) || 0,
+        duration2weeks: Number(row.duration_2weeks) || 0,
+        duration3weeks: Number(row.duration_3weeks) || 0,
+        duration4weeks: Number(row.duration_4weeks) || 0,
+        fontDefault: Number(row.font_default) || 0,
+        fontLarge: Number(row.font_large) || 0,
+        dateRange: { start: startISO, end: endISO }
+      };
+    } catch (error) {
+      console.error('Get aggregated stats error:', error);
       throw error;
     }
   }

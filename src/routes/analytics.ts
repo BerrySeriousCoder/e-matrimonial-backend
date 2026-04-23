@@ -1,26 +1,26 @@
 import express from 'express';
 import { AnalyticsService } from '../services/analyticsService';
-import { userAuth } from '../middleware/userAuth';
 import { requireAdminAuth } from '../middleware/adminAuth';
-import { db } from '../db';
-import { dataEntryStats } from '../db/schema';
 
 const router = express.Router();
 
-// Get admin analytics data
+// Get admin analytics data (aggregated stats for date range)
 router.get('/admin', requireAdminAuth, async (req: any, res) => {
   try {
-    const { period = 'daily', days = 30 } = req.query;
+    const { days = '30' } = req.query;
+    const daysNum = Math.max(1, Math.min(365, parseInt(days as string) || 30));
     
-    console.log('Admin Analytics API - Period:', period, 'Days:', days);
-    const analytics = await AnalyticsService.getAdminAnalytics(period, parseInt(days as string));
-    console.log('Admin Analytics API - Stats found:', Array.isArray(analytics) ? analytics.length : 0, 'records');
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - daysNum);
+    startDate.setHours(0, 0, 0, 0);
+    
+    const stats = await AnalyticsService.getAggregatedStats(startDate, endDate);
     
     res.json({
       success: true,
-      data: analytics,
-      period,
-      days: parseInt(days as string)
+      data: stats,
+      days: daysNum
     });
   } catch (error) {
     console.error('Admin analytics error:', error);
