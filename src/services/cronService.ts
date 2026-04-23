@@ -96,7 +96,7 @@ export class CronService {
 
           await sendEmail({
             to: post.email,
-            subject: '[E‑Matrimonials] Your ad is expiring soon — extend it now!',
+            subject: '[e-matrimonial.in] Your ad is expiring soon — extend it now!',
             text,
             html,
             disableUnsubscribe: true,

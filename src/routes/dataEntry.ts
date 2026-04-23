@@ -79,7 +79,7 @@ router.post('/posts', requireRole(['data_entry']), sanitizeInput, validate(schem
       const { html, text } = tmplDataEntrySubmitted({ email, content, lookingFor });
       sendEmail({
         to: email,
-        subject: '[E‑Matrimonials] Ad submitted on your behalf',
+        subject: '[e-matrimonial.in] Ad submitted on your behalf',
         text,
         html,
         logMetadata: { senderEmail: 'system', emailType: 'notification' },

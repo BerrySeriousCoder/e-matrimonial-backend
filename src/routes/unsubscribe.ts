@@ -25,7 +25,7 @@ router.get('/', async (req, res) => {
 
         const alreadyUnsubscribed = await db.select().from(emailUnsubscribes).where(eq(emailUnsubscribes.email, email));
         if (alreadyUnsubscribed.length > 0) {
-            return res.send(renderResultPage('Already Unsubscribed', `<strong>${email}</strong> is already unsubscribed from E‑Matrimonials marketing emails.`, true));
+            return res.send(renderResultPage('Already Unsubscribed', `<strong>${email}</strong> is already unsubscribed from e-matrimonial.in marketing emails.`, true));
         }
 
         const activePosts = await db.select({
@@ -73,7 +73,7 @@ router.post('/confirm', express.urlencoded({ extended: false }), async (req, res
             console.log(`Email unsubscribed: ${email}`);
         }
 
-        res.send(renderResultPage('Unsubscribed', `<strong>${email}</strong> has been unsubscribed from E‑Matrimonials marketing emails. You will still receive important transactional emails (OTP, payment confirmations, etc.).`, true));
+        res.send(renderResultPage('Unsubscribed', `<strong>${email}</strong> has been unsubscribed from e-matrimonial.in marketing emails. You will still receive important transactional emails (OTP, payment confirmations, etc.).`, true));
     } catch (error: any) {
         console.error('Unsubscribe confirm error:', error?.message);
         if (error?.name === 'TokenExpiredError') {
@@ -153,7 +153,7 @@ function renderConfirmPage(email: string, token: string, activePosts: ActivePost
             <div class="warning-icon">⚠️</div>
             <div class="warning-title">You have ${activePosts.length} active ad${activePosts.length > 1 ? 's' : ''} with this email</div>
             <div class="warning-text">
-                If you unsubscribe, <strong>people browsing E‑Matrimonials will not be able to reach out to you</strong> via email regarding your ad${activePosts.length > 1 ? 's' : ''}. 
+                If you unsubscribe, <strong>people browsing e-matrimonial.in will not be able to reach out to you</strong> via email regarding your ad${activePosts.length > 1 ? 's' : ''}. 
                 You will lose potential responses to your matrimonial listing${activePosts.length > 1 ? 's' : ''}.
             </div>
         </div>
@@ -168,7 +168,7 @@ function renderConfirmPage(email: string, token: string, activePosts: ActivePost
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Unsubscribe — E‑Matrimonials</title>
+  <title>Unsubscribe — e-matrimonial.in</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: #f6f7fb; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
@@ -208,7 +208,7 @@ function renderConfirmPage(email: string, token: string, activePosts: ActivePost
     <div class="header">
       <div class="icon">📧</div>
       <h1>Unsubscribe from emails?</h1>
-      <p class="subtitle">You are about to unsubscribe this email from E‑Matrimonials notifications:</p>
+      <p class="subtitle">You are about to unsubscribe this email from e-matrimonial.in notifications:</p>
       <div class="email-tag">${email}</div>
     </div>
 
@@ -233,7 +233,7 @@ function renderConfirmPage(email: string, token: string, activePosts: ActivePost
     </div>
 
     <p class="note">This will not delete your account or remove your ads.</p>
-    <div class="brand">E‑Matrimonials</div>
+    <div class="brand">e-matrimonial.in</div>
   </div>
 </body>
 </html>`;
@@ -247,7 +247,7 @@ function renderResultPage(title: string, message: string, success: boolean) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>${title} — E‑Matrimonials</title>
+  <title>${title} — e-matrimonial.in</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: #f6f7fb; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
     .card { background: #fff; border-radius: 12px; box-shadow: 0 4px 18px rgba(16,24,40,0.06); max-width: 480px; width: 90%; padding: 40px; text-align: center; }
@@ -262,7 +262,7 @@ function renderResultPage(title: string, message: string, success: boolean) {
     <div class="icon">${icon}</div>
     <h1>${title}</h1>
     <p>${message}</p>
-    <div class="brand">E‑Matrimonials</div>
+    <div class="brand">e-matrimonial.in</div>
   </div>
 </body>
 </html>`;

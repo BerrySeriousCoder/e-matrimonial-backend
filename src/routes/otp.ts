@@ -26,7 +26,7 @@ router.post('/request', sanitizeInput, validate(schemas.requestOtp), async (req,
     const { html, text } = tmplOtp({ otp });
     await sendEmail({
       to: email,
-      subject: `Your OTP: ${otp} - E‑Matrimonial`,
+      subject: `Your OTP: ${otp} - e-matrimonial.in`,
       text,
       html,
       disableUnsubscribe: true,

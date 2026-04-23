@@ -109,7 +109,7 @@ router.post('/login-with-otp', sanitizeInput, validate(schemas.requestOtp), asyn
   try {
     await sendEmail({
       to: email,
-      subject: `Your OTP: ${otp} - E-Matrimonial Login`,
+      subject: `Your OTP: ${otp} - e-matrimonial.in Login`,
       text: `Your login OTP is: ${otp}\nIt is valid for 10 minutes.`,
       logMetadata: { senderEmail: 'system', emailType: 'otp' },
     });

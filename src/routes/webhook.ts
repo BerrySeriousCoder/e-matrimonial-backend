@@ -192,7 +192,7 @@ async function handlePaymentLinkPaid(payload: any) {
       });
       await sendEmail({ 
         to: post.email, 
-        subject: '[E‑Matrimonials] Your ad is now live!', 
+        subject: '[e-matrimonial.in] Your ad is now live!', 
         text, 
         html,
         disableUnsubscribe: true,
@@ -438,7 +438,7 @@ async function handlePaymentCaptured(payload: any) {
         });
         await sendEmail({
           to: post.email,
-          subject: '[E‑Matrimonials] Your ad has been extended!',
+          subject: '[e-matrimonial.in] Your ad has been extended!',
           text,
           html,
           disableUnsubscribe: true,
@@ -483,7 +483,7 @@ async function handlePaymentCaptured(payload: any) {
       console.error('Error tracking payment success analytics:', analyticsError);
     }
 
-    // Send confirmation email — ad is now live
+    // Send confirmation email — ad is now live (with preview and direct link)
     try {
       console.log('📧 Sending ad published email to:', post.email);
       const duration = post.duration || 14;
@@ -492,10 +492,12 @@ async function handlePaymentCaptured(payload: any) {
       const { html, text } = tmplPublished({
         email: post.email,
         expiresAt,
+        postId,
+        content: post.content,
       });
       await sendEmail({
         to: post.email,
-        subject: '[E‑Matrimonials] Your ad is now live!',
+        subject: '[e-matrimonial.in] Your ad is now live!',
         text,
         html,
         disableUnsubscribe: true,

@@ -250,7 +250,7 @@ router.post('/:token/verify-order', async (req, res) => {
       });
       await sendEmail({
         to: post.email,
-        subject: '[E‑Matrimonials] Your ad has been extended!',
+        subject: '[e-matrimonial.in] Your ad has been extended!',
         text,
         html,
         disableUnsubscribe: true,

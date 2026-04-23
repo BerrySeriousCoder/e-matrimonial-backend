@@ -4,7 +4,7 @@ export function brandWrapper(subject: string, bodyHtml: string, bodyText: string
   const unsubscribeFooter = showUnsubscribe ? `
           <tr>
             <td style="padding:16px 24px;border-top:1px solid #eef2f7;color:#475467;font-size:12px;">
-              <div>You're receiving this email from E‑Matrimonials.</div>
+              <div>You're receiving this email from e-matrimonial.in.</div>
               <div style="margin-top:6px;">${unsubscribeUrl
       ? `<a href="${unsubscribeUrl}" style="color:#6366f1;text-decoration:underline;">Unsubscribe</a> from these emails.`
       : 'To stop receiving these, use the Unsubscribe link below.'
@@ -18,7 +18,7 @@ export function brandWrapper(subject: string, bodyHtml: string, bodyText: string
         <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;box-shadow:0 4px 18px rgba(16,24,40,0.06);overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#101828;">
           <tr>
             <td style="background:#1f2937;color:#fff;padding:20px 24px;">
-              <div style="font-size:18px;font-weight:700;">E‑Matrimonials</div>
+              <div style="font-size:18px;font-weight:700;">e-matrimonial.in</div>
               <div style="opacity:.9;font-size:14px;margin-top:4px;">${subject}</div>
             </td>
           </tr>
@@ -35,7 +35,7 @@ export function brandWrapper(subject: string, bodyHtml: string, bodyText: string
   const unsubscribeText = showUnsubscribe
     ? (unsubscribeUrl ? `\n\nUnsubscribe: ${unsubscribeUrl}` : `\n\nUnsubscribe available via your email provider's unsubscribe button.`)
     : '';
-  const text = `E-Matrimonials\n${subject}\n\n${bodyText}${unsubscribeText}`;
+  const text = `e-matrimonial.in\n${subject}\n\n${bodyText}${unsubscribeText}`;
   return { html, text };
 }
 
@@ -46,7 +46,7 @@ export function brandWrapperBasic(subject: string, bodyHtml: string, bodyText: s
       <td align="center">
         <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;box-shadow:0 4px 18px rgba(16,24,40,0.06);overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#101828;">
           <tr>
-            <td style="background:#1f2937;color:#fff;padding:16px 20px;font-weight:700;">E‑Matrimonials</td>
+            <td style="background:#1f2937;color:#fff;padding:16px 20px;font-weight:700;">e-matrimonial.in</td>
           </tr>
           <tr>
             <td style="padding:22px 24px;line-height:1.6;">
@@ -58,12 +58,12 @@ export function brandWrapperBasic(subject: string, bodyHtml: string, bodyText: s
       </td>
     </tr>
   </table>`;
-  const text = `E-Matrimonials\n${subject}\n\n${bodyText}`;
+  const text = `e-matrimonial.in\n${subject}\n\n${bodyText}`;
   return { html, text };
 }
 
 export function tmplOtp(params: { otp: string }) {
-  const subject = `Your OTP is ${params.otp} - E‑Matrimonials`;
+  const subject = `Your OTP is ${params.otp} - e-matrimonial.in`;
   const bodyHtml = `
     <p style="margin:0 0 12px;color:#475467;">Use this code to continue. It expires in 10 minutes.</p>
     <div style="margin:16px 0 8px;">
@@ -130,7 +130,8 @@ export function tmplPublished(params: { email: string; expiresAt?: Date; postId?
 
   const bodyHtml = `
     <p>Hello ${params.email},</p>
-    <p style="font-size:18px;color:#059669;font-weight:600;margin:16px 0;">🎉 Good news! Your matrimonial advertisement is now live!</p>
+    <p style="font-size:18px;color:#059669;font-weight:600;margin:16px 0;">🎉 CONGRATULATIONS! Your matrimonial advertisement is now live!</p>
+    <p style="color:#475467;margin:0 0 16px;">We look forward to providing a very beautiful experience during your journey of finding the perfect soulmate. In case you need absolutely any assistance, please directly contact us at <a href="mailto:superadmin@e-matrimonial.in" style="color:#6366f1;">superadmin@e-matrimonial.in</a></p>
     ${contentPreview ? `
     <div style="background:#f9fafb;border:1px solid #eef2f7;border-radius:8px;padding:16px;margin:16px 0;">
       <div style="color:#475467;font-size:12px;margin-bottom:8px;font-weight:600;">Your Ad Preview</div>
@@ -144,17 +145,19 @@ export function tmplPublished(params: { email: string; expiresAt?: Date; postId?
         View Your Ad
       </a>
     </div>
-    <p style="color:#667085;font-size:13px;margin-top:16px;">Click the button above to see your ad live on E‑Matrimonials. You can share this link with family and friends!</p>
-    <p>Thank you for using E‑Matrimonials.</p>
+    <p style="color:#667085;font-size:13px;margin-top:16px;">Click the button above to see your ad live on e-matrimonial.in. You can share this link with family and friends!</p>
+    <p>Thank you for using e-matrimonial.in.</p>
   `;
   const bodyText = `Hello ${params.email},
 
-Good news! Your matrimonial advertisement is now live!
+CONGRATULATIONS! Your matrimonial advertisement is now live!
+
+We look forward to providing a very beautiful experience during your journey of finding the perfect soulmate. In case you need absolutely any assistance, please directly contact us at superadmin@e-matrimonial.in
 ${contentPreview ? `\nYour Ad Preview:\n${contentPreview}\n` : ''}
 ${params.expiresAt ? `Expires on: ${params.expiresAt.toDateString()}\n` : ''}
 View your ad: ${viewAdUrl}
 
-Thank you for using E-Matrimonials.`;
+Thank you for using e-matrimonial.in.`;
   return brandWrapper(subject, bodyHtml, bodyText, false);
 }
 
@@ -235,7 +238,7 @@ export function tmplPostArchived(params: { email: string; contentPreview: string
     </div>
     ${reasonHtml}
     <p>If you believe this was done in error or have any questions, please contact our support team.</p>
-    <p>Thank you for using E‑Matrimonials.</p>
+    <p>Thank you for using e-matrimonial.in.</p>
   `;
   const bodyText = `Hello ${params.email},
 Your matrimonial advertisement has been archived by our team.
@@ -243,7 +246,7 @@ Your matrimonial advertisement has been archived by our team.
 Ad Preview: "${params.contentPreview}"
 ${params.reason ? `\nReason: ${params.reason}\n` : ''}
 If you believe this was done in error or have any questions, please contact our support team.
-Thank you for using E-Matrimonials.`;
+Thank you for using e-matrimonial.in.`;
   return brandWrapper(subject, bodyHtml, bodyText);
 }
 
@@ -266,7 +269,7 @@ export function tmplPostDeleted(params: { email: string; contentPreview: string;
     </div>
     ${reasonHtml}
     <p>If you believe this was done in error or have any questions, please contact our support team.</p>
-    <p>Thank you for using E‑Matrimonials.</p>
+    <p>Thank you for using e-matrimonial.in.</p>
   `;
   const bodyText = `Hello ${params.email},
 Your matrimonial advertisement has been removed by our team.
@@ -274,7 +277,7 @@ Your matrimonial advertisement has been removed by our team.
 Ad Preview: "${params.contentPreview}"
 ${params.reason ? `\nReason: ${params.reason}\n` : ''}
 If you believe this was done in error or have any questions, please contact our support team.
-Thank you for using E-Matrimonials.`;
+Thank you for using e-matrimonial.in.`;
   return brandWrapper(subject, bodyHtml, bodyText);
 }
 
@@ -321,7 +324,7 @@ export function tmplExpiryReminder(params: {
       </a>
     </div>
     <p style="color:#667085;font-size:13px;margin-top:16px;">Click the button above to review your ad and extend its visibility. You can also <a href="${viewAdUrl}" style="color:#6366f1;">view your current ad here</a>.</p>
-    <p>Thank you for using E‑Matrimonials.</p>
+    <p>Thank you for using e-matrimonial.in.</p>
   `;
   const bodyText = `Hello ${params.email},
 
@@ -332,7 +335,7 @@ Expires on: ${params.expiresAt.toDateString()}
 Extend your ad for 2 more weeks: ${params.extendUrl}
 View your ad: ${viewAdUrl}
 
-Thank you for using E-Matrimonials.`;
+Thank you for using e-matrimonial.in.`;
   return brandWrapper(subject, bodyHtml, bodyText, false);
 }
 
@@ -369,7 +372,7 @@ export function tmplAdExtended(params: {
       </a>
     </div>
     <p style="color:#667085;font-size:13px;margin-top:16px;">Your ad is live and visible to all users. Share this link with family and friends!</p>
-    <p>Thank you for using E‑Matrimonials.</p>
+    <p>Thank you for using e-matrimonial.in.</p>
   `;
   const bodyText = `Hello ${params.email},
 
@@ -379,6 +382,6 @@ New expiry date: ${params.newExpiresAt.toDateString()}
 
 View your ad: ${viewAdUrl}
 
-Thank you for using E-Matrimonials.`;
+Thank you for using e-matrimonial.in.`;
   return brandWrapper(subject, bodyHtml, bodyText, false);
 }

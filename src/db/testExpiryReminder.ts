@@ -62,7 +62,7 @@ async function main() {
   console.log('');
   console.log('📬 Check your inbox at: iamshredderig@gmail.com');
   console.log('   You should receive an email titled:');
-  console.log('   "[E‑Matrimonials] Your ad is expiring soon — extend it now!"');
+  console.log('   "[e-matrimonial.in] Your ad is expiring soon — extend it now!"');
   console.log('');
   console.log('🔗 The email will contain an "Extend Your Ad" button.');
   console.log('   Click it to test the full extension + payment flow.');

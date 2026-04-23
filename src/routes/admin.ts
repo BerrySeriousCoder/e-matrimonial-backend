@@ -335,7 +335,7 @@ router.post('/posts/:id/republish', requireAdminAuth, sanitizeInput, async (req:
       });
       sendEmail({
         to: archivedPost.email,
-        subject: '[E‑Matrimonials] Your ad has been republished',
+        subject: '[e-matrimonial.in] Your ad has been republished',
         text,
         html,
         disableUnsubscribe: true,
@@ -555,7 +555,7 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
         });
         sendEmail({
           to: currentPost.email,
-          subject: '[E‑Matrimonials] Your ad is published',
+          subject: '[e-matrimonial.in] Your ad is published',
           text,
           html,
           disableUnsubscribe: true,
@@ -570,7 +570,7 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
         });
         sendEmail({
           to: currentPost.email,
-          subject: '[E‑Matrimonials] Your matrimonial ad has been approved, kindly proceed for payment',
+          subject: '[e-matrimonial.in] Your matrimonial ad has been approved, kindly proceed for payment',
           text,
           html,
           disableUnsubscribe: true,
@@ -584,7 +584,7 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
         });
         sendEmail({
           to: currentPost.email,
-          subject: '[E‑Matrimonials] Your ad has been archived',
+          subject: '[e-matrimonial.in] Your ad has been archived',
           text,
           html,
           logMetadata: { senderEmail: 'system', postId: currentPost.id, emailType: 'status_update' },
@@ -597,7 +597,7 @@ router.put('/posts/:id/status', requireAdminAuth, async (req: AdminRequest, res)
         });
         sendEmail({
           to: currentPost.email,
-          subject: '[E‑Matrimonials] Your ad has been removed',
+          subject: '[e-matrimonial.in] Your ad has been removed',
           text,
           html,
           logMetadata: { senderEmail: 'system', postId: currentPost.id, emailType: 'status_update' },
