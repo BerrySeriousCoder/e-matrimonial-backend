@@ -171,11 +171,10 @@ export function tmplPublished(params: { email: string; expiresAt?: Date; postId?
   const siteUrl = process.env.CLIENT_BASE_URL || process.env.FRONTEND_URL || 'https://e-matrimonials.com';
   const viewAdUrl = params.postId ? `${siteUrl}/?highlight=${params.postId}` : siteUrl;
 
-  // Strip HTML tags and truncate content for preview
-  const contentPreview = params.content
-    ? params.content.replace(/<[^>]*>/g, '').slice(0, 200) + (params.content.length > 200 ? '…' : '')
-    : '';
-  const safePreview = contentPreview.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Convert HTML to plain text while preserving list structure, then truncate
+  const contentPlainText = params.content ? htmlToPlainText(params.content) : '';
+  const contentPreview = contentPlainText.slice(0, 200) + (contentPlainText.length > 200 ? '…' : '');
+  const safePreview = contentPreview.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
 
   const bodyHtml = `
     <p>Hello ${params.email},</p>
@@ -348,11 +347,10 @@ export function tmplExpiryReminder(params: {
   const siteUrl = process.env.CLIENT_BASE_URL || process.env.FRONTEND_URL || 'https://e-matrimonials.com';
   const viewAdUrl = `${siteUrl}/?highlight=${params.postId}`;
   
-  // Strip HTML tags and truncate content for preview
-  const contentPreview = params.content
-    ? params.content.replace(/<[^>]*>/g, '').slice(0, 200) + (params.content.length > 200 ? '…' : '')
-    : '';
-  const safePreview = contentPreview.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Convert HTML to plain text while preserving list structure, then truncate
+  const contentPlainText = params.content ? htmlToPlainText(params.content) : '';
+  const contentPreview = contentPlainText.slice(0, 200) + (contentPlainText.length > 200 ? '…' : '');
+  const safePreview = contentPreview.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
 
   // Calculate time remaining
   const now = new Date();
@@ -405,11 +403,10 @@ export function tmplAdExtended(params: {
   const siteUrl = process.env.CLIENT_BASE_URL || process.env.FRONTEND_URL || 'https://e-matrimonials.com';
   const viewAdUrl = `${siteUrl}/?highlight=${params.postId}`;
 
-  // Strip HTML tags and truncate content for preview
-  const contentPreview = params.content
-    ? params.content.replace(/<[^>]*>/g, '').slice(0, 200) + (params.content.length > 200 ? '…' : '')
-    : '';
-  const safePreview = contentPreview.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Convert HTML to plain text while preserving list structure, then truncate
+  const contentPlainText = params.content ? htmlToPlainText(params.content) : '';
+  const contentPreview = contentPlainText ? contentPlainText.slice(0, 200) + (contentPlainText.length > 200 ? '…' : '') : '';
+  const safePreview = contentPreview.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
 
   const bodyHtml = `
     <p>Hello ${params.email},</p>
