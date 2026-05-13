@@ -94,6 +94,7 @@ export const posts = pgTable("posts", {
 	expiryReminderSent: boolean("expiry_reminder_sent").default(false).notNull(),
 	previousPostId: integer("previous_post_id"),
 	classificationId: integer("classification_id"),
+	phoneNumbers: jsonb("phone_numbers").$type<string[]>(),
 }, (table) => [
 	foreignKey({
 		columns: [table.userId],
@@ -392,4 +393,24 @@ export const emailUnsubscribes = pgTable("email_unsubscribes", {
 }, (table) => [
 	unique("email_unsubscribes_email_unique").on(table.email),
 	index("idx_email_unsubscribes_email").using("btree", table.email.asc().nullsLast().op("text_ops")),
+]);
+
+// Bulk import tracking
+export const bulkImportJobs = pgTable("bulk_import_jobs", {
+	id: serial().primaryKey().notNull(),
+	adminId: integer("admin_id").notNull(),
+	fileName: varchar("file_name", { length: 255 }).notNull(),
+	totalRows: integer("total_rows").default(0).notNull(),
+	successCount: integer("success_count").default(0).notNull(),
+	rejectedCount: integer("rejected_count").default(0).notNull(),
+	status: varchar({ length: 50 }).default('completed').notNull(),
+	rejectedProfiles: jsonb("rejected_profiles"),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	foreignKey({
+		columns: [table.adminId],
+		foreignColumns: [admins.id],
+		name: "bulk_import_jobs_admin_id_admins_id_fk"
+	}),
+	index("idx_bulk_import_jobs_admin_id").on(table.adminId),
 ]);

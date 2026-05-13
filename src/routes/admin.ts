@@ -180,6 +180,7 @@ router.get('/posts', requireAdminAuth, validateQuery(schemas.adminPostsQuery), a
         couponCode: posts.couponCode,
         publishedAt: posts.publishedAt,
         previousPostId: posts.previousPostId,
+        classificationId: posts.classificationId,
         createdByAdmin: {
           id: admins.id,
           email: admins.email,
@@ -242,6 +243,7 @@ router.get('/posts/:id', requireAdminAuth, async (req: AdminRequest, res) => {
       couponCode: posts.couponCode,
       publishedAt: posts.publishedAt,
       previousPostId: posts.previousPostId,
+      classificationId: posts.classificationId,
       createdByAdmin: {
         id: admins.id,
         email: admins.email,

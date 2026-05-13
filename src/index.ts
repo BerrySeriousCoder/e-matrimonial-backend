@@ -20,6 +20,7 @@ import unsubscribeRouter from './routes/unsubscribe';
 import classificationsRouter from './routes/classifications';
 import aiSearchRouter from './routes/aiSearch';
 import adExtendRouter from './routes/adExtend';
+import bulkImportRouter from './routes/bulkImport';
 import cron from 'node-cron';
 import { CronService } from './services/cronService';
 
@@ -116,6 +117,7 @@ app.use('/api/user', AL, userRouter);
 app.use('/api/admin', ADM, adminRouter);
 app.use('/api/admin/management', SAL, adminManagementRouter);
 app.use('/api/data-entry', ADM, dataEntryRouter);
+app.use('/api/admin/bulk-import', ADM, bulkImportRouter);
 
 // Classification routes
 app.use('/api/classifications', GL, classificationsRouter);

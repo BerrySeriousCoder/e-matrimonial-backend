@@ -71,7 +71,8 @@ export const schemas = {
     bgColor: Joi.string().valid(...ALLOWED_BG_COLORS).default('#ffffff'),
     icon: Joi.string().valid(...ALLOWED_ICONS).optional().allow(null),
     couponCode: Joi.string().optional().allow(''),
-    classificationId: Joi.number().integer().positive().required()
+    classificationId: Joi.number().integer().positive().required(),
+    phoneNumbers: Joi.array().items(Joi.string().pattern(/^\d{10,13}$/)).optional().allow(null)
   }).messages({
     'string.textLength': 'Content text length must be between 10 and 1000 characters (currently {{#textLength}})'
   }),
@@ -107,7 +108,8 @@ export const schemas = {
     bgColor: Joi.string().valid(...ALLOWED_BG_COLORS).default('#ffffff'),
     icon: Joi.string().valid(...ALLOWED_ICONS).optional().allow(null),
     couponCode: Joi.string().optional().allow(''),
-    classificationId: Joi.number().integer().positive().required()
+    classificationId: Joi.number().integer().positive().required(),
+    phoneNumbers: Joi.array().items(Joi.string().pattern(/^\d{10,13}$/)).optional().allow(null)
   }).messages({
     'string.textLength': 'Content text length must be between 10 and 1000 characters (currently {{#textLength}})'
   }),
@@ -232,7 +234,8 @@ export const schemas = {
     bgColor: Joi.string().valid(...ALLOWED_BG_COLORS).default('#ffffff'),
     icon: Joi.string().valid(...ALLOWED_ICONS).optional().allow(null),
     couponCode: Joi.string().optional().allow(''),
-    classificationId: Joi.number().integer().positive().optional().allow(null)
+    classificationId: Joi.number().integer().positive().optional().allow(null),
+    phoneNumbers: Joi.array().items(Joi.string().pattern(/^\d{10,13}$/)).optional().allow(null)
   }).messages({
     'string.textLength': 'Content text length must be between 10 and 1000 characters (currently {{#textLength}})'
   }),
@@ -252,7 +255,8 @@ export const schemas = {
     fontSize: Joi.string().valid('default', 'large').optional(), // Removed 'medium'
     bgColor: Joi.string().valid(...ALLOWED_BG_COLORS).optional(),
     icon: Joi.string().valid(...ALLOWED_ICONS).optional().allow(null),
-    classificationId: Joi.number().integer().positive().optional().allow(null)
+    classificationId: Joi.number().integer().positive().optional().allow(null),
+    phoneNumbers: Joi.array().items(Joi.string().pattern(/^\d{10,13}$/)).optional().allow(null)
   }).messages({
     'string.textLength': 'Content text length must be between 10 and 1000 characters (currently {{#textLength}})'
   }),
